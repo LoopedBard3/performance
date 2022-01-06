@@ -306,17 +306,11 @@ ex: C:\repos\performance;C:\repos\runtime
 
 
         elif self.testtype == const.DEVICESTARTUP:  
-            getLogger().info("Clearing potential previous run nettraces")
-            for file in glob.glob(os.path.join(const.TRACEDIR, 'PerfTest', 'trace*.nettrace')):
-                if exists(file):   
-                    getLogger().info("Removed: " + os.path.join(const.TRACEDIR, file))
-                    os.remove(file)
-        
+            print(self.packagename)
+     
             cmdline = xharnesscommand() + [self.devicetype, 'state', '--adb']
             adb = RunCommand(cmdline, verbose=True)
             adb.run()
-            cmdline = [adb.stdout.strip(), 'shell', 'mkdir', '-p', '/sdcard/PerfTest']
-            RunCommand(cmdline, verbose=True).run()
 
             cmdline = xharnesscommand() + [
                 self.devicetype,
@@ -331,28 +325,40 @@ ex: C:\repos\performance;C:\repos\runtime
 
             RunCommand(cmdline, verbose=True).run()
 
+            cmdline = [ 
+                adb.stdout.strip(),
+                'shell',
+                f'cmd package resolve-activity --brief {self.packagename} | tail -n 1'
+            ]
+            getActivity = RunCommand(cmdline, verbose=True)
+            getActivity.run()
+            print(getActivity.stdout)
 
-            for i in range(self.startupiterations):
-                cmdline = xharnesscommand() + [
-                    'android',
-                    'run',
-                    '-o',
-                    const.TRACEDIR,
-                    '--package-name',
-                    self.packagename,
-                    '-v',
-                    '--arg=env:COMPlus_EnableEventPipe=1',
-                    '--arg=env:COMPlus_EventPipeOutputStreaming=1',
-                    '--arg=env:COMPlus_EventPipeOutputPath=/sdcard/PerfTest/trace%s.nettrace' % (i+1),
-                    '--arg=env:COMPlus_EventPipeCircularMB=10',
-                    '--arg=env:COMPlus_EventPipeConfig=Microsoft-Windows-DotNETRuntime:10:5',
-                    '--expected-exit-code',
-                    self.expectedexitcode,
-                    '--dev-out',
-                    '/sdcard/PerfTest/'
-                ]
-            
-                RunCommand(cmdline, verbose=True).run()
+            activityname = getActivity.stdout
+            cmdline = [ 
+                adb.stdout.strip(),
+                'shell',
+                'am',
+                'start-activity',
+                '-W',
+                '-S',
+                '-R',
+                str(self.startupiterations),
+                '-n',
+                activityname
+            ]
+            startStats = RunCommand(cmdline, verbose=True)
+            startStats.run()
+
+            cmdline = [ 
+                adb.stdout.strip(),
+                'shell',
+                'am',
+                'force-stop',
+                self.packagename
+            ]
+            RunCommand(cmdline, verbose=True).run()
+                    
 
             cmdline = xharnesscommand() + [
                 'android',
@@ -363,14 +369,9 @@ ex: C:\repos\performance;C:\repos\runtime
 
             RunCommand(cmdline, verbose=True).run()
 
-            cmdline = [adb.stdout.strip(), 'shell', 'rm', '-r', '/sdcard/PerfTest']
-            RunCommand(cmdline, verbose=True).run()
-            
-
-
-            startup = StartupWrapper()
-            self.traits.add_traits(overwrite=True, apptorun="app", startupmetric=const.STARTUP_DEVICETIMETOMAIN, tracefolder='PerfTest/', tracename='trace*.nettrace', scenarioname='Device Startup - Android %s' % (self.packagename))
-            startup.parsetraces(self.traits)
+            #startup = StartupWrapper()
+            #self.traits.add_traits(overwrite=True, apptorun="app", startupmetric=const.STARTUP_DEVICETIMETOMAIN, tracefolder='PerfTest/', tracename='trace*.nettrace', scenarioname='Device Startup - Android %s' % (self.packagename))
+            #startup.parsetraces(self.traits)
 
         elif self.testtype == const.SOD:
             sod = SODWrapper()
