@@ -330,20 +330,20 @@ ex: C:\repos\performance;C:\repos\runtime
             checkPackage = RunCommand(cmdline, verbose=True)
             checkPackage.run()
 
-            if self.packagename not in checkPackage.stdout:
-                cmdline = [
-                    'xharness',
-                    'android',
-                    'install',
-                    '--app', self.packagepath,
-                    '--package-name',
-                    self.packagename,
-                    '-o',
-                    const.TRACEDIR,
-                    '-v'
-                ]
+            #if self.packagename not in checkPackage.stdout:
+            cmdline = [
+                'xharness',
+                'android',
+                'install',
+                '--app', self.packagepath,
+                '--package-name',
+                self.packagename,
+                '-o',
+                const.TRACEDIR,
+                '-v'
+            ]
 
-                RunCommand(cmdline, verbose=True).run()
+            RunCommand(cmdline, verbose=True).run()
 
             print("Completed install, running shell.")
             cmdline = [ 
@@ -458,16 +458,16 @@ ex: C:\repos\performance;C:\repos\runtime
             ]
             RunCommand(cmdline, verbose=True).run()
                     
-            if self.packagename not in checkPackage.stdout:
-                cmdline = [
-                    'xharness',
-                    'android',
-                    'uninstall',
-                    '--package-name',
-                    self.packagename
-                ]
+            #if self.packagename not in checkPackage.stdout:
+            cmdline = [
+                'xharness',
+                'android',
+                'uninstall',
+                '--package-name',
+                self.packagename
+            ]
 
-                RunCommand(cmdline, verbose=True).run()
+            RunCommand(cmdline, verbose=True).run()
 
 
 
