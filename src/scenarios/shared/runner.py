@@ -61,7 +61,7 @@ class Runner:
         parseonlyparser.add_argument('--device-type', choices=['android','ios'],type=str.lower,help='Device type for testing', dest='devicetype')
         parseonlyparser.add_argument('--package-path', help='Location of test application', dest='packagepath')
         parseonlyparser.add_argument('--package-name', help='Classname of application', dest='packagename')
-        parseonlyparser.add_argument('--exit-code', help='Success exit code', dest='expectedexitcode')
+        parseonlyparser.add_argument('--exit-code', help='Success exit code', type=int, default=0, dest='expectedexitcode')
         parseonlyparser.add_argument('--startup-iterations', help='Startups to run (1+)', type=int, default=5, dest='startupiterations')
         self.add_common_arguments(parseonlyparser)
 
