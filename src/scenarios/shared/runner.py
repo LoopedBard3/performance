@@ -7,6 +7,7 @@ import sys
 import os
 import glob
 import re
+import time
 
 from logging import getLogger
 from collections import namedtuple
@@ -307,6 +308,7 @@ ex: C:\repos\performance;C:\repos\runtime
 
         elif self.testtype == const.DEVICESTARTUP:  
             print(self.packagename)
+            runRegex = ":\s(.+)"
      
             cmdline = xharnesscommand() + [self.devicetype, 'state', '--adb']
             adb = RunCommand(cmdline, verbose=True)
@@ -334,6 +336,7 @@ ex: C:\repos\performance;C:\repos\runtime
             getActivity.run()
             print(getActivity.stdout)
 
+            #Test run
             activityname = getActivity.stdout
             cmdline = [ 
                 adb.stdout.strip(),
@@ -341,14 +344,71 @@ ex: C:\repos\performance;C:\repos\runtime
                 'am',
                 'start-activity',
                 '-W',
-                '-S',
-                '-R',
-                str(self.startupiterations),
                 '-n',
                 activityname
             ]
-            startStats = RunCommand(cmdline, verbose=True)
-            startStats.run()
+            testRun = RunCommand(cmdline, verbose=True)
+            testRun.run()
+            testRunStats = re.findall(runRegex, testRun.stdout)
+            print(testRunStats[3])
+            # If package was not expected or was permissions, overdo the permissions
+            if self.packagename not in testRunStats[3]:
+                if "com.google.android.permissioncontroller" not in testRunStats[3]:
+                    raise Exception(f"Unknown activity {testRunStats[3]} set as default!")
+
+                # Permission Package is being run, bypass it
+                # Get screen size
+                screenSize = [ 
+                    adb.stdout.strip(),
+                    'shell',
+                    'wm',
+                    'size'
+                ]
+                screenSizeResult = RunCommand(screenSize, verbose=True)
+                screenSizeResult.run()
+                screenSizeValues = re.findall(runRegex, screenSizeResult.stdout)
+                # Tap bottom right
+
+
+            stopApp = [ 
+                adb.stdout.strip(),
+                'shell',
+                'am',
+                'force-stop',
+                self.packagename
+            ]
+            RunCommand(stopApp, verbose=True).run()
+
+            totalTimes = []
+
+            # Loop test
+            for i in range(self.startupiterations):
+                cmdline = [ 
+                    adb.stdout.strip(),
+                    'shell',
+                    'am',
+                    'start-activity',
+                    '-W',
+                    '-n',
+                    activityname
+                ]
+                startStats = RunCommand(cmdline, verbose=True)
+                startStats.run()
+
+                # Parse and save results (List is Intent, Status, LaunchState Activity, TotalTime, WaitTime)
+                cleanedRunStats = re.findall(runRegex, startStats.stdout)
+                print("Cleaned Stats")
+                print(cleanedRunStats)
+                
+                RunCommand(stopApp, verbose=True).run()
+
+                # Add new total time to total time array
+                totalTimes.append(cleanedRunStats[4])
+
+                time.sleep(3) # Delay in seconds for ensuring a cold start
+
+            print("Total Times List")
+            print(totalTimes)
 
             cmdline = [ 
                 adb.stdout.strip(),
@@ -368,6 +428,8 @@ ex: C:\repos\performance;C:\repos\runtime
             ]
 
             RunCommand(cmdline, verbose=True).run()
+
+
 
             #startup = StartupWrapper()
             #self.traits.add_traits(overwrite=True, apptorun="app", startupmetric=const.STARTUP_DEVICETIMETOMAIN, tracefolder='PerfTest/', tracename='trace*.nettrace', scenarioname='Device Startup - Android %s' % (self.packagename))
