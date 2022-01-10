@@ -326,7 +326,7 @@ ex: C:\repos\performance;C:\repos\runtime
             ]
 
             RunCommand(cmdline, verbose=True).run()
-
+            print("Completed install, running shell.")
             cmdline = [ 
                 adb.stdout.strip(),
                 'shell',
