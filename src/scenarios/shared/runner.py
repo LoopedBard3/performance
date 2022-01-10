@@ -17,7 +17,7 @@ from io import StringIO
 from shutil import move
 from shared.crossgen import CrossgenArguments
 from shared.startup import StartupWrapper
-from shared.util import publishedexe, pythoncommand, appfolder, xharnesscommand
+from shared.util import publishedexe, pythoncommand, appfolder
 from shared.sod import SODWrapper
 from shared import const
 from performance.common import RunCommand, iswin, extension
@@ -310,25 +310,47 @@ ex: C:\repos\performance;C:\repos\runtime
             print(self.packagename)
             runRegex = ":\s(.+)"
      
-            cmdline = xharnesscommand() + [self.devicetype, 'state', '--adb']
-            adb = RunCommand(cmdline, verbose=True)
-            adb.run()
+            #cmdline = ['xharness', self.devicetype, 'state', '--adb']
+            #adb = RunCommand(cmdline, verbose=True)
+            #adb.run()
 
-            cmdline = xharnesscommand() + [
-                self.devicetype,
-                'install',
-                '--app', self.packagepath,
-                '--package-name',
-                self.packagename,
-                '-o',
-                const.TRACEDIR,
-                '-v'
+            # Check if app already installed for helix use
+            cmdline = [
+                'xharness',
+                'android',
+                'adb',
+                '--',
+                'shell',
+                'pm',
+                'list',
+                'packages',
+                self.packagename
             ]
 
-            RunCommand(cmdline, verbose=True).run()
+            checkPackage = RunCommand(cmdline, verbose=True)
+            checkPackage.run()
+
+            if self.packagename not in checkPackage.stdout:
+                cmdline = [
+                    'xharness',
+                    'android',
+                    'install',
+                    '--app', self.packagepath,
+                    '--package-name',
+                    self.packagename,
+                    '-o',
+                    const.TRACEDIR,
+                    '-v'
+                ]
+
+                RunCommand(cmdline, verbose=True).run()
+
             print("Completed install, running shell.")
             cmdline = [ 
-                adb.stdout.strip(),
+                'xharness',
+                'android',
+                'adb',
+                '--',
                 'shell',
                 f'cmd package resolve-activity --brief {self.packagename} | tail -n 1'
             ]
@@ -339,7 +361,10 @@ ex: C:\repos\performance;C:\repos\runtime
             #Test run
             activityname = getActivity.stdout
             cmdline = [ 
-                adb.stdout.strip(),
+                'xharness',
+                'android',
+                'adb',
+                '--',
                 'shell',
                 'am',
                 'start-activity',
@@ -351,6 +376,8 @@ ex: C:\repos\performance;C:\repos\runtime
             testRun.run()
             testRunStats = re.findall(runRegex, testRun.stdout)
             print(testRunStats[3])
+
+
             # If package was not expected or was permissions, overdo the permissions
             if self.packagename not in testRunStats[3]:
                 if "com.google.android.permissioncontroller" not in testRunStats[3]:
@@ -359,7 +386,10 @@ ex: C:\repos\performance;C:\repos\runtime
                 # Permission Package is being run, bypass it
                 # Get screen size
                 screenSize = [ 
-                    adb.stdout.strip(),
+                    'xharness',
+                    'android',
+                    'adb',
+                    '--',
                     'shell',
                     'wm',
                     'size'
@@ -371,7 +401,10 @@ ex: C:\repos\performance;C:\repos\runtime
 
 
             stopApp = [ 
-                adb.stdout.strip(),
+                'xharness',
+                'android',
+                'adb',
+                '--',
                 'shell',
                 'am',
                 'force-stop',
@@ -384,7 +417,10 @@ ex: C:\repos\performance;C:\repos\runtime
             # Loop test
             for i in range(self.startupiterations):
                 cmdline = [ 
-                    adb.stdout.strip(),
+                    'xharness',
+                    'android',
+                    'adb',
+                    '--',
                     'shell',
                     'am',
                     'start-activity',
@@ -411,7 +447,10 @@ ex: C:\repos\performance;C:\repos\runtime
             print(totalTimes)
 
             cmdline = [ 
-                adb.stdout.strip(),
+                'xharness',
+                'android',
+                'adb',
+                '--',
                 'shell',
                 'am',
                 'force-stop',
@@ -419,15 +458,16 @@ ex: C:\repos\performance;C:\repos\runtime
             ]
             RunCommand(cmdline, verbose=True).run()
                     
+            if self.packagename not in checkPackage.stdout:
+                cmdline = [
+                    'xharness',
+                    'android',
+                    'uninstall',
+                    '--package-name',
+                    self.packagename
+                ]
 
-            cmdline = xharnesscommand() + [
-                'android',
-                'uninstall',
-                '--package-name',
-                self.packagename
-            ]
-
-            RunCommand(cmdline, verbose=True).run()
+                RunCommand(cmdline, verbose=True).run()
 
 
 
