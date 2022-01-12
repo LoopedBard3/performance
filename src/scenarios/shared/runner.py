@@ -17,7 +17,7 @@ from io import StringIO
 from shutil import move
 from shared.crossgen import CrossgenArguments
 from shared.startup import StartupWrapper
-from shared.util import publishedexe, pythoncommand, appfolder
+from shared.util import publishedexe, pythoncommand, appfolder, xharnesscommand
 from shared.sod import SODWrapper
 from shared import const
 from performance.common import RunCommand, iswin, extension
@@ -315,21 +315,19 @@ ex: C:\repos\performance;C:\repos\runtime
             #adb.run()
 
             # Check if app already installed for helix use
-            print("Checking xharness version")
-            cmdline = [
-                'xharness',
+            getLogger().info("Checking xharness version")
+            cmdline = xharnesscommand() + [
                 'version'
             ]
 
             checkVersion = RunCommand(cmdline, verbose=True)
             checkVersion.run()
 
-            print(f"Current Dir: {os.getcwd()}")
-            print(f"Files: {os.listdir()}")
+            getLogger().info(f"Current Dir: {os.getcwd()}")
+            getLogger().info(f"Files: {os.listdir()}")
 
-            print("Installing")
-            cmdline = [
-                'xharness',
+            getLogger().info("Installing")
+            cmdline = xharnesscommand() + [
                 'android',
                 'install',
                 '--app', self.packagepath,
@@ -342,9 +340,8 @@ ex: C:\repos\performance;C:\repos\runtime
 
             RunCommand(cmdline, verbose=True).run()
 
-            print("Completed install, running shell.")
-            cmdline = [ 
-                'xharness',
+            getLogger().info("Completed install, running shell.")
+            cmdline = xharnesscommand() + [ 
                 'android',
                 'adb',
                 '--',
@@ -353,13 +350,12 @@ ex: C:\repos\performance;C:\repos\runtime
             ]
             getActivity = RunCommand(cmdline, verbose=True)
             getActivity.run()
-            print(getActivity.stdout)
+            getLogger().info(getActivity.stdout)
 
             #Test run
-            print("Test run")
+            getLogger().info("Test run")
             activityname = getActivity.stdout
-            cmdline = [ 
-                'xharness',
+            cmdline = xharnesscommand() + [ 
                 'android',
                 'adb',
                 '--',
@@ -373,9 +369,9 @@ ex: C:\repos\performance;C:\repos\runtime
             testRun = RunCommand(cmdline, verbose=True)
             testRun.run()
             testRunStats = re.findall(runRegex, testRun.stdout)
-            print(testRunStats[3])
+            getLogger().info(testRunStats[3])
 
-            print("Check Perms")
+            getLogger().info("Check Perms")
             # If package was not expected or was permissions, overdo the permissions
             if self.packagename not in testRunStats[3]:
                 if "com.google.android.permissioncontroller" not in testRunStats[3]:
@@ -383,8 +379,7 @@ ex: C:\repos\performance;C:\repos\runtime
 
                 # Permission Package is being run, bypass it
                 # Get screen size
-                screenSize = [ 
-                    'xharness',
+                screenSize = xharnesscommand() + [ 
                     'android',
                     'adb',
                     '--',
@@ -398,8 +393,7 @@ ex: C:\repos\performance;C:\repos\runtime
                 # Tap bottom right
 
 
-            stopApp = [ 
-                'xharness',
+            stopApp = xharnesscommand() + [ 
                 'android',
                 'adb',
                 '--',
@@ -413,10 +407,9 @@ ex: C:\repos\performance;C:\repos\runtime
             totalTimes = []
 
             # Loop test
-            print("Testing")
+            getLogger().info("Testing")
             for i in range(self.startupiterations):
-                cmdline = [ 
-                    'xharness',
+                cmdline = xharnesscommand() + [ 
                     'android',
                     'adb',
                     '--',
@@ -432,8 +425,8 @@ ex: C:\repos\performance;C:\repos\runtime
 
                 # Parse and save results (List is Intent, Status, LaunchState Activity, TotalTime, WaitTime)
                 cleanedRunStats = re.findall(runRegex, startStats.stdout)
-                print("Cleaned Stats")
-                print(cleanedRunStats)
+                getLogger().info("Cleaned Stats")
+                getLogger().info(cleanedRunStats)
                 
                 RunCommand(stopApp, verbose=True).run()
 
@@ -442,12 +435,11 @@ ex: C:\repos\performance;C:\repos\runtime
 
                 time.sleep(3) # Delay in seconds for ensuring a cold start
 
-            print("Total Times List")
-            print(totalTimes)
+            getLogger().info("Total Times List")
+            getLogger().info(totalTimes)
 
-            print("Force Stopping")
-            cmdline = [ 
-                'xharness',
+            getLogger().info("Force Stopping")
+            cmdline = xharnesscommand() + [ 
                 'android',
                 'adb',
                 '--',
@@ -458,9 +450,8 @@ ex: C:\repos\performance;C:\repos\runtime
             ]
             RunCommand(cmdline, verbose=True).run()
                     
-            print("Uninstalling app")
-            cmdline = [
-                'xharness',
+            getLogger().info("Uninstalling app")
+            cmdline = xharnesscommand() + [
                 'android',
                 'uninstall',
                 '--package-name',
