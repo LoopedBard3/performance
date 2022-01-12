@@ -315,22 +315,19 @@ ex: C:\repos\performance;C:\repos\runtime
             #adb.run()
 
             # Check if app already installed for helix use
+            print("Checking xharness version")
             cmdline = [
                 'xharness',
-                'android',
-                'adb',
-                '--',
-                'shell',
-                'pm',
-                'list',
-                'packages',
-                self.packagename
+                'version'
             ]
 
-            checkPackage = RunCommand(cmdline, verbose=True)
-            checkPackage.run()
+            checkVersion = RunCommand(cmdline, verbose=True)
+            checkVersion.run()
 
-            #if self.packagename not in checkPackage.stdout:
+            print(f"Current Dir: {os.getcwd()}")
+            print(f"Files: {os.listdir()}")
+
+            print("Installing")
             cmdline = [
                 'xharness',
                 'android',
@@ -359,6 +356,7 @@ ex: C:\repos\performance;C:\repos\runtime
             print(getActivity.stdout)
 
             #Test run
+            print("Test run")
             activityname = getActivity.stdout
             cmdline = [ 
                 'xharness',
@@ -377,7 +375,7 @@ ex: C:\repos\performance;C:\repos\runtime
             testRunStats = re.findall(runRegex, testRun.stdout)
             print(testRunStats[3])
 
-
+            print("Check Perms")
             # If package was not expected or was permissions, overdo the permissions
             if self.packagename not in testRunStats[3]:
                 if "com.google.android.permissioncontroller" not in testRunStats[3]:
@@ -415,6 +413,7 @@ ex: C:\repos\performance;C:\repos\runtime
             totalTimes = []
 
             # Loop test
+            print("Testing")
             for i in range(self.startupiterations):
                 cmdline = [ 
                     'xharness',
@@ -446,6 +445,7 @@ ex: C:\repos\performance;C:\repos\runtime
             print("Total Times List")
             print(totalTimes)
 
+            print("Force Stopping")
             cmdline = [ 
                 'xharness',
                 'android',
@@ -458,7 +458,7 @@ ex: C:\repos\performance;C:\repos\runtime
             ]
             RunCommand(cmdline, verbose=True).run()
                     
-            #if self.packagename not in checkPackage.stdout:
+            print("Uninstalling app")
             cmdline = [
                 'xharness',
                 'android',
