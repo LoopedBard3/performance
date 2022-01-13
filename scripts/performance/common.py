@@ -199,6 +199,8 @@ class RunCommand:
                     stderr=STDOUT,
                     universal_newlines=True,
                     encoding="utf-8",
+                    shell=True,
+                    start_new_session=True
             ) as proc:
                 if proc.stdout is not None:
                     with proc.stdout:
