@@ -327,6 +327,7 @@ ex: C:\repos\performance;C:\repos\runtime
             getLogger().info(f"Files: {os.listdir()}")
 
             getLogger().info("Installing")
+            print("Installing")
             cmdline = xharnesscommand() + [
                 'android',
                 'install',
@@ -349,6 +350,7 @@ ex: C:\repos\performance;C:\repos\runtime
             checkVersion.run()
 
             getLogger().info("Completed install, running shell.")
+            print("Running Shell!")
             cmdline = xharnesscommand() + [ 
                 'android',
                 'adb',
