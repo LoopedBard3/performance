@@ -185,7 +185,7 @@ class RunCommand:
     def stdout(self) -> str:
         return self.__stdout.getvalue()
 
-    def __runinternal(self, working_directory: str = None) -> tuple:
+    def __runinternal(self, working_directory: str = None, timeout: int = 0) -> tuple:
         should_pipe = self.verbose
         with push_dir(working_directory):
             quoted_cmdline = '$ '
@@ -199,9 +199,9 @@ class RunCommand:
                     stderr=STDOUT,
                     universal_newlines=True,
                     encoding="utf-8",
-                    shell=True,
-                    start_new_session=True
             ) as proc:
+                #if timeout > 0:
+                #    proc.communicate(timeout=timeout)
                 if proc.stdout is not None:
                     with proc.stdout:
                         self.__stdout = StringIO()
@@ -213,11 +213,11 @@ class RunCommand:
                 return (proc.returncode, quoted_cmdline)
 
 
-    def run(self, working_directory: str = None) -> None:
+    def run(self, working_directory: str = None, timeout: int = 0) -> None:
         '''Executes specified shell command.'''
 
         retrycount = 0
-        (returncode, quoted_cmdline) = self.__runinternal(working_directory)
+        (returncode, quoted_cmdline) = self.__runinternal(working_directory, timeout)
         while returncode not in self.success_exit_codes and self.__retry != 0 and retrycount <= self.__retry:
             (returncode, _) = self.__runinternal(working_directory)
             retrycount += 1
