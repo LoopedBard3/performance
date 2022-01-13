@@ -340,6 +340,14 @@ ex: C:\repos\performance;C:\repos\runtime
 
             RunCommand(cmdline, verbose=True).run()
 
+            getLogger().info("Checking xharness version")
+            cmdline = xharnesscommand() + [
+                'version'
+            ]
+
+            checkVersion = RunCommand(cmdline, verbose=True)
+            checkVersion.run()
+
             getLogger().info("Completed install, running shell.")
             cmdline = xharnesscommand() + [ 
                 'android',
