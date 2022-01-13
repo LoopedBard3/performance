@@ -316,7 +316,8 @@ ex: C:\repos\performance;C:\repos\runtime
 
             # Check if app already installed for helix use
             getLogger().info("Checking xharness version")
-            cmdline = xharnesscommand() + [
+            cmdline = [
+                'xharness',
                 'version'
             ]
 
@@ -328,7 +329,8 @@ ex: C:\repos\performance;C:\repos\runtime
 
             getLogger().info("Installing")
             print("Installing")
-            cmdline = xharnesscommand() + [
+            cmdline = [
+                'xharness',
                 'android',
                 'install',
                 '--app', self.packagepath,
@@ -341,8 +343,12 @@ ex: C:\repos\performance;C:\repos\runtime
 
             RunCommand(cmdline, verbose=True).run()
 
+            getLogger().info(f"Current Dir: {os.getcwd()}")
+            getLogger().info(f"Files: {os.listdir()}")
+
             getLogger().info("Checking xharness version")
-            cmdline = xharnesscommand() + [
+            cmdline = [
+                'xharness',
                 'version'
             ]
 
@@ -351,7 +357,8 @@ ex: C:\repos\performance;C:\repos\runtime
 
             getLogger().info("Completed install, running shell.")
             print("Running Shell!")
-            cmdline = xharnesscommand() + [ 
+            cmdline = [
+                'xharness',
                 'android',
                 'adb',
                 '--',
@@ -365,7 +372,8 @@ ex: C:\repos\performance;C:\repos\runtime
             #Test run
             getLogger().info("Test run")
             activityname = getActivity.stdout
-            cmdline = xharnesscommand() + [ 
+            cmdline = [
+                'xharness',
                 'android',
                 'adb',
                 '--',
@@ -389,7 +397,8 @@ ex: C:\repos\performance;C:\repos\runtime
 
                 # Permission Package is being run, bypass it
                 # Get screen size
-                screenSize = xharnesscommand() + [ 
+                screenSize = [
+                    'xharness',
                     'android',
                     'adb',
                     '--',
@@ -403,7 +412,8 @@ ex: C:\repos\performance;C:\repos\runtime
                 # Tap bottom right
 
 
-            stopApp = xharnesscommand() + [ 
+            stopApp = [
+                'xharness',
                 'android',
                 'adb',
                 '--',
@@ -419,7 +429,8 @@ ex: C:\repos\performance;C:\repos\runtime
             # Loop test
             getLogger().info("Testing")
             for i in range(self.startupiterations):
-                cmdline = xharnesscommand() + [ 
+                cmdline = [
+                    'xharness',
                     'android',
                     'adb',
                     '--',
@@ -449,7 +460,8 @@ ex: C:\repos\performance;C:\repos\runtime
             getLogger().info(totalTimes)
 
             getLogger().info("Force Stopping")
-            cmdline = xharnesscommand() + [ 
+            cmdline = [
+                'xharness',
                 'android',
                 'adb',
                 '--',
@@ -461,7 +473,8 @@ ex: C:\repos\performance;C:\repos\runtime
             RunCommand(cmdline, verbose=True).run()
                     
             getLogger().info("Uninstalling app")
-            cmdline = xharnesscommand() + [
+            cmdline = [
+                'xharness',
                 'android',
                 'uninstall',
                 '--package-name',
