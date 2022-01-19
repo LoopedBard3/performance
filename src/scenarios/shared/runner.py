@@ -23,6 +23,7 @@ from shared import const
 from performance.common import RunCommand, iswin, extension
 from performance.logger import setup_loggers
 from shared.testtraits import TestTraits, testtypes
+from subprocess import Popen
 
 
 class Runner:
@@ -324,7 +325,12 @@ ex: C:\repos\performance;C:\repos\runtime
                 'wm',
                 'size'
             ]
-            RunCommand(cmdline, verbose=False).run()
+            with Popen(
+                    cmdline,
+                    stdout=None,
+                    stderr=None,
+            ) as proc:
+                proc.wait()
 
             getLogger().info("Checking xharness version")
             cmdline = xharnesscommand() + [
