@@ -315,6 +315,17 @@ ex: C:\repos\performance;C:\repos\runtime
             #adb.run()
 
             # Check if app already installed for helix use
+            getLogger().info("Trying ADB workaround")
+            cmdline = xharnesscommand() + [
+                'android',
+                'adb',
+                '--',
+                'shell',
+                'wm',
+                'size'
+            ]
+            RunCommand(cmdline, verbose=False).run()
+
             getLogger().info("Checking xharness version")
             cmdline = xharnesscommand() + [
                 'version'
