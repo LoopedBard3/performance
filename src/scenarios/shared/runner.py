@@ -335,14 +335,15 @@ ex: C:\repos\performance;C:\repos\runtime
                     getLogger().info("Removed: " + os.path.join(const.TRACEDIR, file))
                     os.remove(file)
 
-            cmdline = xharnesscommand() + ['android', 'state', '--adb']
-            adb = RunCommand(cmdline, verbose=True)
-            adb.run()
+            # cmdline = xharnesscommand() + ['android', 'state', '--adb']
+            # adb = RunCommand(cmdline, verbose=True)
+            # adb.run()
+
+            xadb = xharnesscommand() + ['android', 'adb', '--']
 
             # Do not remove, XHarness install seems to fail without an adb command called before the xharness command
             getLogger().info("Preparing ADB")
-            cmdline = [
-                adb.stdout.strip(),
+            cmdline = xadb + [
                 'shell',
                 'wm',
                 'size'
@@ -351,26 +352,22 @@ ex: C:\repos\performance;C:\repos\runtime
 
             # Get animation values
             getLogger().info("Getting Values we will need set specifically")
-            cmdline = [
-                adb.stdout.strip(),
+            cmdline = xadb + [
                 'shell', 'settings', 'get', 'global', 'window_animation_scale'
             ]
             window_animation_scale_cmd = RunCommand(cmdline, verbose=True)
             window_animation_scale_cmd.run()
-            cmdline = [
-                adb.stdout.strip(),
+            cmdline = xadb + [
                 'shell', 'settings', 'get', 'global', 'transition_animation_scale'
             ]
             transition_animation_scale_cmd = RunCommand(cmdline, verbose=True)
             transition_animation_scale_cmd.run()
-            cmdline = [
-                adb.stdout.strip(),
+            cmdline = xadb + [
                 'shell', 'settings', 'get', 'global', 'animator_duration_scale'
             ]
             animator_duration_scale_cmd = RunCommand(cmdline, verbose=True)
             animator_duration_scale_cmd.run()
-            cmdline = [
-                adb.stdout.strip(),
+            cmdline = xadb + [
                 'shell', 'settings', 'get', 'system', 'screen_off_timeout'
             ]
             screen_off_timeout_cmd = RunCommand(cmdline, verbose=True)
@@ -384,23 +381,19 @@ ex: C:\repos\performance;C:\repos\runtime
             else:
                 animationValue = 1
             minimumTimeoutValue = 2 * 60 * 1000 # milliseconds
-            cmdline = [
-                adb.stdout.strip(),
+            cmdline = xadb + [
                 'shell', 'settings', 'put', 'global', 'window_animation_scale', str(animationValue)
             ]
             RunCommand(cmdline, verbose=True).run()
-            cmdline = [
-                adb.stdout.strip(),
+            cmdline = xadb + [
                 'shell', 'settings', 'put', 'global', 'transition_animation_scale', str(animationValue)
             ]
             RunCommand(cmdline, verbose=True).run()
-            cmdline = [
-                adb.stdout.strip(),
+            cmdline = xadb + [
                 'shell', 'settings', 'put', 'global', 'animator_duration_scale', str(animationValue)
             ]
             RunCommand(cmdline, verbose=True).run()
-            cmdline = [
-                adb.stdout.strip(),
+            cmdline = xadb + [
                 'shell', 'settings', 'put', 'system', 'screen_off_timeout', str(minimumTimeoutValue)
             ]
             if(minimumTimeoutValue > int(screen_off_timeout_cmd.stdout.strip())):
@@ -409,20 +402,17 @@ ex: C:\repos\performance;C:\repos\runtime
 
             # Check for success
             getLogger().info("Getting animation values to verify it worked")
-            cmdline = [
-                adb.stdout.strip(),
+            cmdline = xadb + [
                 'shell', 'settings', 'get', 'global', 'window_animation_scale'
             ]
             windowSetValue = RunCommand(cmdline, verbose=True)
             windowSetValue.run()
-            cmdline = [
-                adb.stdout.strip(),
+            cmdline = xadb + [
                 'shell', 'settings', 'get', 'global', 'transition_animation_scale'
             ]
             transitionSetValue = RunCommand(cmdline, verbose=True)
             transitionSetValue.run()
-            cmdline = [
-                adb.stdout.strip(),
+            cmdline = xadb + [
                 'shell', 'settings', 'get', 'global', 'animator_duration_scale'
             ]
             animatorSetValue = RunCommand(cmdline, verbose=True)
@@ -448,8 +438,7 @@ ex: C:\repos\performance;C:\repos\runtime
                 RunCommand(installCmd, verbose=True).run()
 
                 getLogger().info("Completed install, running shell.")
-                cmdline = [ 
-                    adb.stdout.strip(),
+                cmdline = xadb + [ 
                     'shell',
                     f'cmd package resolve-activity --brief {self.packagename} | tail -n 1'
                 ]
@@ -458,16 +447,14 @@ ex: C:\repos\performance;C:\repos\runtime
                 getLogger().info(f"Target Activity {getActivity.stdout}")
 
                 # More setup stuff
-                checkScreenOnCmd = [ 
-                    adb.stdout.strip(),
+                checkScreenOnCmd = xadb + [ 
                     'shell',
                     f'dumpsys input_method | grep mInteractive'
                 ]
                 checkScreenOn = RunCommand(checkScreenOnCmd, verbose=True)
                 checkScreenOn.run()
 
-                keyInputCmd = [
-                    adb.stdout.strip(),
+                keyInputCmd = xadb + [
                     'shell',
                     'input',
                     'keyevent'
@@ -491,8 +478,7 @@ ex: C:\repos\performance;C:\repos\runtime
                 activityname = getActivity.stdout
 
                 # -W in the start command waits for the app to finish initial draw.
-                startAppCmd = [ 
-                    adb.stdout.strip(),
+                startAppCmd = xadb + [ 
                     'shell',
                     'am',
                     'start-activity',
@@ -507,8 +493,7 @@ ex: C:\repos\performance;C:\repos\runtime
 
                 time.sleep(10) # Add delay to ensure app is fully installed and give it some time to settle
 
-                stopAppCmd = [ 
-                    adb.stdout.strip(),
+                stopAppCmd = xadb + [ 
                     'shell',
                     'am',
                     'force-stop',
@@ -541,20 +526,17 @@ ex: C:\repos\performance;C:\repos\runtime
                         raise Exception("Failed to get past permission screen, run locally to see if enough next button presses were used.")
 
                 # Create the fullydrawn command
-                fullyDrawnRetrieveCmd = [ 
-                    adb.stdout.strip(),
+                fullyDrawnRetrieveCmd = xadb + [ 
                     'shell',
                     f"logcat -d | grep 'ActivityTaskManager: Fully drawn {self.packagename}'"
                 ]
 
-                basicStartupRetrieveCmd = [ 
-                    adb.stdout.strip(),
+                basicStartupRetrieveCmd = xadb + [ 
                     'shell',
                     f"logcat -d | grep 'ActivityTaskManager: Displayed {activityname}'"
                 ]
 
-                clearLogsCmd = [
-                    adb.stdout.strip(),
+                clearLogsCmd = xadb + [
                     'logcat',
                     '-c'
                 ]
@@ -599,23 +581,19 @@ ex: C:\repos\performance;C:\repos\runtime
 
                 # Reset animation values 
                 getLogger().info("Resetting animation values to pretest values")
-                cmdline = [
-                    adb.stdout.strip(),
+                cmdline = xadb + [
                     'shell', 'settings', 'put', 'global', 'window_animation_scale', window_animation_scale_cmd.stdout.strip()
                 ]
                 RunCommand(cmdline, verbose=True).run()
-                cmdline = [
-                    adb.stdout.strip(),
+                cmdline = xadb + [
                     'shell', 'settings', 'put', 'global', 'transition_animation_scale', transition_animation_scale_cmd.stdout.strip()
                 ]
                 RunCommand(cmdline, verbose=True).run()
-                cmdline = [
-                    adb.stdout.strip(),
+                cmdline = xadb + [
                     'shell', 'settings', 'put', 'global', 'animator_duration_scale', animator_duration_scale_cmd.stdout.strip()
                 ]
                 RunCommand(cmdline, verbose=True).run()
-                cmdline = [
-                    adb.stdout.strip(),
+                cmdline = xadb + [
                     'shell', 'settings', 'put', 'system', 'screen_off_timeout', screen_off_timeout_cmd.stdout.strip()
                 ]
                 RunCommand(cmdline, verbose=True).run()
