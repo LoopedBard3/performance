@@ -502,7 +502,7 @@ ex: C:\repos\performance;C:\repos\runtime
                 # Actual testing some run stuff
                 getLogger().info("Test run to check if permissions are needed")
                 activityname = getActivity.stdout.strip()
-
+                RunCommand([adb.stdout.strip(), "logcat", "-c"], verbose=True).run()
                 # -W in the start command waits for the app to finish initial draw.
                 startAppCmd = [ 
                     adb.stdout.strip(),
@@ -517,6 +517,7 @@ ex: C:\repos\performance;C:\repos\runtime
                 testRun.run()
                 testRunStats = re.findall(runSplitRegex, testRun.stdout) # Split results saving value (List: Starting, Status, LaunchState, Activity, TotalTime, WaitTime) 
                 getLogger().info(f"Test run activity: {testRunStats[3]}")
+                RunCommand([adb.stdout.strip(), "logcat", "-d"], verbose=True).run()
                 time.sleep(10) # Add delay to ensure app is fully installed and give it some time to settle
                 
                 RunCommand(stopAppCmd, verbose=True).run()
