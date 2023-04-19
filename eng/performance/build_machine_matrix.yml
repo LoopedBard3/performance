@@ -58,7 +58,7 @@ jobs:
       osVersion: 1804
       architecture: x64
       pool: 
-        vmImage: ubuntu-latest
+        vmImage: ubuntu-20.04
       container: centos_x64_build_container
       ${{ insert }}: ${{ parameters.jobParameters }}
       ${{ if eq(parameters.isPublic, true) }}:
@@ -75,7 +75,7 @@ jobs:
       osVersion: 7
       architecture: x64
       pool: 
-        vmImage: ubuntu-latest
+        vmImage: ubuntu-20.04
       machinePool: Open
       queue: centos.7.amd64.open
       container: centos_x64_build_container
