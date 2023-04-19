@@ -279,13 +279,13 @@ jobs:
       buildMachines:
         - win-x64
         - ubuntu-x64
-        - win-arm64
+        # - win-arm64
       isPublic: false
       jobParameters:
         kind: scenarios
         projectFile: scenarios.proj
-        channels:
-          - main
+        dotnetVersion: 
+          main: 8.0.100-preview.4.23217.8
 
   # Maui Android scenario benchmarks
   - template: /eng/performance/build_machine_matrix.yml
@@ -333,15 +333,15 @@ jobs:
     parameters:
       jobTemplate: /eng/performance/scenarios.yml
       buildMachines:
-        - win-x64
+        # - win-x64
         - ubuntu-x64
-        - win-arm64
+        # - win-arm64
       isPublic: false
       jobParameters:
         kind: nativeaot_scenarios
         projectFile: nativeaot_scenarios.proj
-        channels:
-          - main
+        dotnetVersion: 
+          main: 8.0.100-preview.4.23217.8
 
 ################################################
 # Scheduled Private jobs

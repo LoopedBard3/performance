@@ -8,6 +8,7 @@ parameters:
   container: ''         # optional -- id of the container
   channels: []          # optional (must have dotnetVersionsLinks if not used) -- list of channels to download .NET from
   dotnetVersionsLinks: [] # optional alternative to channels that uses 'channel: link' values to scrape the link's json for dotnet_version or version
+  dotnetVersion: []
   projectFile: ''       # required -- project file to build (current choices: scenarios.proj/sdk_scenarios.proj )
   machinePool: ''       # required -- Name of perf machine pool (Tiger, Owl, etc)
 
@@ -95,6 +96,13 @@ jobs:
                   _DotnetVersionLink: ${{ versionPair.value }}
                   _Configs: CompilationMode=Tiered RunKind="${{ parameters.kind }}"
                   _BuildConfig: ${{ parameters.architecture }}_$(_Channel)_Linked_${{ parameters.kind }} # needs to be unique to avoid logs overwriting in mc.dot.net
+            ${{ if ne(length(parameters.dotnetVersion), 0) }}:
+              ${{ each versionPair in parameters.dotnetVersion }}:
+                ${{ versionPair.key }}_Link:
+                  _Channel: ${{ versionPair.key }}
+                  _DotnetVersion: ${{ versionPair.value }}
+                  _Configs: CompilationMode=Tiered RunKind="${{ parameters.kind }}"
+                  _BuildConfig: ${{ parameters.architecture }}_$(_Channel)_Linked_${{ parameters.kind }} # needs to be unique to avoid logs overwriting in mc.dot.net
         steps:
         - checkout: self
           clean: true
@@ -113,6 +121,9 @@ jobs:
             displayName: Get dotnetVersion to use
           - script: $(Python) scripts/ci_setup.py --channel $(_Channel) --dotnet-versions $(DotnetVersion) --architecture ${{parameters.architecture}} --perf-hash $(Build.SourceVersion) --queue ${{parameters.queue}} --build-number $(Build.BuildNumber) --build-configs $(_Configs) --output-file $(CorrelationStaging)machine-setup$(ScriptExtension) --install-dir $(CorrelationStaging)dotnet
             displayName: Run ci_setup.py with dotnetVersionsLinks
+        - ${{ elseif ne(length(parameters.dotnetVersion), 0) }}:
+          - script: $(Python) scripts/ci_setup.py --channel $(_Channel) --dotnet-versions $(_DotnetVersion) --architecture ${{parameters.architecture}} --perf-hash $(Build.SourceVersion) --queue ${{parameters.queue}} --build-number $(Build.BuildNumber) --build-configs $(_Configs) --output-file $(CorrelationStaging)machine-setup$(ScriptExtension) --install-dir $(CorrelationStaging)dotnet
+            displayName: Run ci_setup.py with dotnetVersion
         - ${{ if eq(parameters.osName, 'windows') }}:
           - script: xcopy .\NuGet.config $(CorrelationStaging) && xcopy .\scripts $(CorrelationStaging)scripts\/e && xcopy .\src\scenarios\shared $(CorrelationStaging)shared\/e && xcopy .\src\scenarios\staticdeps $(CorrelationStaging)staticdeps\/e
             displayName: Copy python libraries and NuGet.config
