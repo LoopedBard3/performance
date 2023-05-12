@@ -274,7 +274,7 @@ jobs:
       isPublic: true
       jobParameters:
         kind: powershell
-        csproj: src\benchmarks\real-world\Powershell.Benchmarks\PowerShell.Benchmarks.csproj
+        csproj: src\benchmarks\real-world\PowerShell.Benchmarks\PowerShell.Benchmarks.csproj
         runCategories: 'Public'
         channels:
           - main
@@ -585,7 +585,7 @@ jobs:
       isPublic: false
       jobParameters:
         kind: powershell
-        csproj: src\benchmarks\real-world\Powershell.Benchmarks\PowerShell.Benchmarks.csproj
+        csproj: src\benchmarks\real-world\PowerShell.Benchmarks\PowerShell.Benchmarks.csproj
         runCategories: 'Public Internal'
         channels:
           - main
