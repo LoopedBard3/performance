@@ -56,6 +56,8 @@ public class RawProcessHelper : IProcessHelper
 
     public bool RootAccess { get; set; } = false;
 
+    public int ProcessorAffinity { get; set; } = 0;
+
     public RawProcessHelper(Logger logger)
     {
         Logger = logger;
@@ -108,7 +110,16 @@ public class RawProcessHelper : IProcessHelper
         var process = new Process();
 
         process.StartInfo = psi;
+        var defaultToolAffinity = Process.GetCurrentProcess().ProcessorAffinity;
+        if (ProcessorAffinity > 0)
+        {
+            Process.GetCurrentProcess().ProcessorAffinity = (IntPtr)ProcessorAffinity;
+        }
+        Logger.Log($"Affinity values (Prestart): curTool {Process.GetCurrentProcess().ProcessorAffinity}, defaultTool {defaultToolAffinity}");
         process.Start();
+        Process.GetCurrentProcess().ProcessorAffinity = defaultToolAffinity;
+        Logger.Log($"Affinity values (Post start): curTool {Process.GetCurrentProcess().ProcessorAffinity}, defaultTool {defaultToolAffinity}");
+
         return process;
     }
     public void AddEnvironmentVariable(string name, string value)
@@ -156,6 +167,7 @@ public class ManagedProcessHelper : IProcessHelper
 
     public bool RootAccess { get; set; } = false;
     public bool RunWithDotnet { get; set; } = false;
+    public int ProcessorAffinity { get; set; } = 0;
 
     public ManagedProcessHelper(Logger logger)
     {
@@ -243,7 +255,15 @@ public class ManagedProcessHelper : IProcessHelper
                     }
                 };
             }
+            var defaultToolAffinity = Process.GetCurrentProcess().ProcessorAffinity;
+            if (ProcessorAffinity > 0)
+            {
+                Process.GetCurrentProcess().ProcessorAffinity = (IntPtr)ProcessorAffinity;
+            }
+            Logger.Log($"Affinity values (Prestart): curTool {Process.GetCurrentProcess().ProcessorAffinity}, defaultTool {defaultToolAffinity}");
             process.Start();
+            Process.GetCurrentProcess().ProcessorAffinity = defaultToolAffinity;
+            Logger.Log($"Affinity values (Post start): curTool {Process.GetCurrentProcess().ProcessorAffinity}, defaultTool {defaultToolAffinity}");
             var pid = process.Id;
             if (!GuiApp)
             {

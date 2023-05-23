@@ -208,6 +208,7 @@ ex: C:\repos\performance;C:\repos\runtime
         
         if args.processoraffinity:
             self.processoraffinity = args.processoraffinity
+            os.environ['PERFLAB_DATA_AFFINITY'] = self.processoraffinity
 
     
     def add_common_arguments(self, parser: ArgumentParser):

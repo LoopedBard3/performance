@@ -137,11 +137,10 @@ class Startup
 
         logger.Log($"Running {appExe} (args: \"{appArgs}\")");
         logger.Log($"Working Directory: {workingDir}");
-
         if (processorAffinity > 0 && (OperatingSystem.IsWindows() || OperatingSystem.IsLinux()))
         {
-            Process.GetCurrentProcess().ProcessorAffinity = (IntPtr)processorAffinity;
-            logger.Log($"Process Affinity: {Process.GetCurrentProcess().ProcessorAffinity}, mask: {Convert.ToString((int)Process.GetCurrentProcess().ProcessorAffinity, 2)}");
+            logger.Log($"Processor Affinity: {processorAffinity}");
+
         }
         else if (processorAffinity != 0 && !(OperatingSystem.IsWindows() || OperatingSystem.IsLinux()))
         {
@@ -163,7 +162,8 @@ class Startup
                 Arguments = appArgs,
                 WorkingDirectory = workingDir,
                 GuiApp = guiApp,
-                EnvironmentVariables = envVariables
+                EnvironmentVariables = envVariables,
+                ProcessorAffinity = processorAffinity
             };
         }
         else
@@ -178,7 +178,8 @@ class Startup
                 WorkingDirectory = workingDir,
                 GuiApp = guiApp,
                 EnvironmentVariables = envVariables,
-                RunWithDotnet = runWithDotnet
+                RunWithDotnet = runWithDotnet,
+                ProcessorAffinity = processorAffinity
             };
         }
 
@@ -238,7 +239,7 @@ class Startup
 
         if (!String.IsNullOrEmpty(iterationSetup))
         {
-            setupProcHelper = CreateProcHelper(iterationSetup, setupArgs, true, logger);
+            setupProcHelper = CreateProcHelper(iterationSetup, setupArgs, true, logger, processorAffinity);
         }
 
         // create iteration cleanup process helper
@@ -246,12 +247,12 @@ class Startup
         IProcessHelper cleanupProcHelper = null;
         if (!String.IsNullOrEmpty(iterationCleanup))
         {
-            cleanupProcHelper = CreateProcHelper(iterationCleanup, cleanupArgs, true, logger);
+            cleanupProcHelper = CreateProcHelper(iterationCleanup, cleanupArgs, true, logger, processorAffinity);
         }
         IProcessHelper innerLoopProcHelper = null;
         if (!String.IsNullOrEmpty(innerLoopCommand))
         {
-            innerLoopProcHelper = CreateProcHelper(innerLoopCommand, innerLoopCommandArgs, true, logger);
+            innerLoopProcHelper = CreateProcHelper(innerLoopCommand, innerLoopCommandArgs, true, logger, processorAffinity);
         }
 
         Util.Init();
@@ -392,7 +393,7 @@ class Startup
     }
 
 
-    private static IProcessHelper CreateProcHelper(string command, string args, bool runWithExit, Logger logger)
+    private static IProcessHelper CreateProcHelper(string command, string args, bool runWithExit, Logger logger, int processorAffinity = 0)
     {
         IProcessHelper procHelper;
         if (runWithExit)
@@ -402,7 +403,8 @@ class Startup
                 ProcessWillExit = true,
                 Executable = command,
                 Arguments = args,
-                Timeout = 300
+                Timeout = 300,
+                ProcessorAffinity = processorAffinity
             };
         }
         else
@@ -412,7 +414,8 @@ class Startup
                 ProcessWillExit = true,
                 Executable = command,
                 Arguments = args,
-                Timeout = 300
+                Timeout = 300,
+                ProcessorAffinity = processorAffinity
             };
         }
         return procHelper;
