@@ -238,6 +238,13 @@ def __main(args: list) -> int:
 
     if not args.frameworks:
         raise Exception("Framework version (-f) must be specified.")
+    
+    # Log the environment variable value for DOTNET_ROOT and a failure message if it doesn't exist
+    dotnet_root = os.environ.get('DOTNET_ROOT')
+    if not dotnet_root:
+        getLogger().error('DOTNET_ROOT environment variable is not set. (Pre install)')
+    else:
+        getLogger().info('DOTNET_ROOT environment variable is set to %s (Pre install)', dotnet_root)
 
     target_framework_monikers = dotnet \
         .FrameworkAction \
@@ -263,6 +270,13 @@ def __main(args: list) -> int:
     os.environ['PERFLAB_TARGET_FRAMEWORKS'] = ';'.join(
         target_framework_monikers
     )
+
+    # Log the environment variable value for DOTNET_ROOT and a failure message if it doesn't exist
+    dotnet_root = os.environ.get('DOTNET_ROOT')
+    if not dotnet_root:
+        getLogger().error('DOTNET_ROOT environment variable is not set.')
+    else:
+        getLogger().info('DOTNET_ROOT environment variable is set to %s', dotnet_root)
 
     # dotnet --info
     dotnet.info(verbose=verbose)
