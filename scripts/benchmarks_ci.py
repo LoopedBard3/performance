@@ -277,6 +277,8 @@ def __main(args: list) -> int:
         getLogger().error('DOTNET_ROOT environment variable is not set.')
     else:
         getLogger().info('DOTNET_ROOT environment variable is set to %s', dotnet_root)
+        for file in glob(os.path.join(dotnet_root, '..', '..', '..', '..'), recursive=True):
+            getLogger().info('Found File: %s', file)
 
     # dotnet --info
     dotnet.info(verbose=verbose)
