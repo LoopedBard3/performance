@@ -31,7 +31,7 @@ from performance.common import extension, helixpayload, runninginlab, validate_s
 from performance.logger import setup_loggers
 from performance.constants import UPLOAD_CONTAINER, UPLOAD_STORAGE_URI, UPLOAD_TOKEN_VAR, UPLOAD_QUEUE
 from channel_map import ChannelMap
-from subprocess import Popen, CalledProcessError
+from subprocess import Popen, CalledProcessError, run
 from shutil import copy
 from glob import glob
 
@@ -271,14 +271,24 @@ def __main(args: list) -> int:
         target_framework_monikers
     )
 
-    # Log the environment variable value for DOTNET_ROOT and a failure message if it doesn't exist
-    dotnet_root = os.environ.get('DOTNET_ROOT')
-    if not dotnet_root:
-        getLogger().error('DOTNET_ROOT environment variable is not set.')
-    else:
-        getLogger().info('DOTNET_ROOT environment variable is set to %s', dotnet_root)
-        for file in glob(os.path.join(dotnet_root[:dotnet_root.find("performance")], "**"), recursive=True):
-            getLogger().info('Found File: %s', file)
+    getLogger().info(os.environ['PATH'])
+    getLogger().info(os.environ['DOTNET_ROOT'])
+    dotnet_path = f"{dotnet_root}/dotnet"
+    getLogger().info(f"dotnet (DOTNET_ROOT original): {os.path.isfile(dotnet_path)}")
+    dotnet_path2 = f"{os.environ['DOTNET_ROOT']}/dotnet"
+    getLogger().info(dotnet_path2)
+    getLogger().info(f"dotnet (DOTNET_ROOT current): {os.path.isfile(dotnet_path2)}")
+    getLogger().info(f"symlink: {os.path.islink(dotnet_path2)}")
+    getLogger().info(f"isfile: {os.path.isfile(dotnet_path2)}")
+    getLogger().info(f"size: {os.stat(dotnet_path2).st_size}")
+    getLogger().info(f"mode: {os.stat(dotnet_path2).st_mode}")
+    RunCommand(['chmod', '-R', 'a+rx', os.environ['DOTNET_ROOT']]).run()
+    getLogger().info(f"mode: {os.stat(dotnet_path2).st_mode}")
+    RunCommand(['which', 'dotnet']).run()
+    RunCommand(['rm', os.path.join(os.environ['DOTNET_ROOT'], "dotnet")]).run()
+    cmdline = [dotnet_path2, '--info']
+    RunCommand(cmdline, verbose=verbose).run()
+
 
     # dotnet --info
     dotnet.info(verbose=verbose)
