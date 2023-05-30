@@ -288,6 +288,7 @@ def __main(args: list) -> int:
     os.environ['PATH'] = os.environ['DOTNET_ROOT'] + ':' + os.environ['PATH']
     getLogger().info('PATH: ' + os.environ['PATH'])
     RunCommand(['which', 'dotnet']).run()
+    RunCommand(['ldd', dotnet_path2]).run()
     cmdline = [dotnet_root, '--info']
     RunCommand(cmdline, verbose=verbose).run()
 
