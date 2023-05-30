@@ -283,13 +283,14 @@ def __main(args: list) -> int:
     getLogger().info(f"size: {os.stat(dotnet_path2).st_size}")
     getLogger().info(f"mode: {os.stat(dotnet_path2).st_mode}")
     RunCommand(['chmod', '-R', 'a+rx', os.environ['DOTNET_ROOT']]).run()
+    RunCommand(['ls', '-laR', os.environ['DOTNET_ROOT']]).run()
     getLogger().info(f"mode: {os.stat(dotnet_path2).st_mode}")
     RunCommand(['which', 'dotnet']).run()
     os.environ['PATH'] = os.environ['DOTNET_ROOT'] + ':' + os.environ['PATH']
     getLogger().info('PATH: ' + os.environ['PATH'])
     RunCommand(['which', 'dotnet']).run()
     RunCommand(['ldd', dotnet_path2]).run()
-    cmdline = [dotnet_root, '--info']
+    cmdline = [dotnet_path2, '--info']
     RunCommand(cmdline, verbose=verbose).run()
 
 
