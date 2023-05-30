@@ -285,8 +285,10 @@ def __main(args: list) -> int:
     RunCommand(['chmod', '-R', 'a+rx', os.environ['DOTNET_ROOT']]).run()
     getLogger().info(f"mode: {os.stat(dotnet_path2).st_mode}")
     RunCommand(['which', 'dotnet']).run()
-    RunCommand(['rm', os.path.join(os.environ['DOTNET_ROOT'], "dotnet")]).run()
-    cmdline = [dotnet_path2, '--info']
+    os.environ['PATH'] = os.environ['DOTNET_ROOT'] + ':' + os.environ['PATH']
+    getLogger().info('PATH: ' + os.environ['PATH'])
+    RunCommand(['which', 'dotnet']).run()
+    cmdline = [dotnet_root, '--info']
     RunCommand(cmdline, verbose=verbose).run()
 
 
