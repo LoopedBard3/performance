@@ -581,6 +581,20 @@ jobs:
 
 # Scheduled runs will run all of the jobs on the PerfTigers, as well as the Arm64 job
 - ${{ if and(and(ne(variables['System.TeamProject'], 'public'), in(variables['Build.Reason'], 'Schedule')), contains(variables['Build.QueuedBy'], 'Weekly')) }}:
+    # Blazor 3.2 scenario benchmarks
+  - template: /eng/performance/build_machine_matrix.yml
+    parameters:
+      jobTemplate: /eng/performance/scenarios.yml
+      buildMachines:
+        - win-x64
+        - ubuntu-x64
+      isPublic: false
+      jobParameters:
+        kind: blazor_scenarios
+        projectFile: blazor_scenarios_hybrid_globalization.proj
+        channels:
+          - main
+  
   - job: Synchronize
     pool:
       name: NetCore1ESPool-Internal-NoMSI
