@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.PowerShell.SDK" Version="7.3.7" />
+    <PackageReference Include="Microsoft.Management.Infrastructure" Version="3.0.0-*" />
   </ItemGroup>
 
   <ItemGroup>
