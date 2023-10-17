@@ -334,6 +334,10 @@ def main(argv: List[str]):
             if helix_upload_root is not None:
                 for file in glob(globpath, recursive=True):
                     shutil.copy(file, os.path.join(helix_upload_root, file.split(os.sep)[-1]))
+                getLogger().info(f"Moving files in {bin_dir_to_use} to {helix_upload_root}")
+                for file in glob(os.path.join(bin_dir_to_use, 'Job-**', '**'), recursive=True):
+                    shutil.copy(file, os.path.join(helix_upload_root, file.split(os.sep)[-1]))
+                    getLogger().info(f"Moving {file} to {helix_upload_root}")
             else:
                 getLogger().info("Skipping upload of artifacts to Helix as HELIX_WORKITEM_UPLOAD_ROOT environment variable is not set.")
 
