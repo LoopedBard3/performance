@@ -29,6 +29,7 @@ import os
 import shutil
 import sys
 from typing import Any, List, Optional
+from zipfile import ZipFile 
 
 from performance.common import validate_supported_runtime, get_artifacts_directory, helixuploadroot
 from performance.logger import setup_loggers
@@ -334,6 +335,18 @@ def main(argv: List[str]):
             if helix_upload_root is not None:
                 for file in glob(globpath, recursive=True):
                     shutil.copy(file, os.path.join(helix_upload_root, file.split(os.sep)[-1]))
+                
+                if run_contains_errors:
+                    # Make a zip file of the files in the directory: performance/artifacts/bin/for-running/MicroBenchmarks
+                    # and upload it to helix
+                    zip_file_name = os.path.join(helix_upload_root, f"bdn-microbenchmarks-artifacts.zip")
+                    microbenchmarks_globpath = os.path.join(get_artifacts_directory(), '**', 'MicroBenchmarks', '**')
+                    with ZipFile(zip_file_name, 'w') as zip_file:
+                        for file in glob(microbenchmarks_globpath, recursive=True):
+                            zip_file.write(file, os.path.basename(file))
+                    getLogger().info(f"Set {zip_file_name} inside the helix upload root directory.")
+
+                
             else:
                 getLogger().info("Skipping upload of artifacts to Helix as HELIX_WORKITEM_UPLOAD_ROOT environment variable is not set.")
 
