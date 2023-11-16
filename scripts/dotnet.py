@@ -837,7 +837,7 @@ def install(
     # Install Runtime/SDKs
     if versions:
         for version in versions:
-            cmdline_args = common_cmdline_args + ['-Version', version]
+            cmdline_args = common_cmdline_args + ['-Version', version, '-Verbose']
             RunCommand(cmdline_args, verbose=verbose, retry=1).run(
                 get_repo_root_path()
             )
