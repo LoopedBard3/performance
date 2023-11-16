@@ -25,6 +25,12 @@ from datetime import datetime
 import json
 from logging import getLogger
 
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from azure.monitor.opentelemetry.exporter import AzureMonitorTraceExporter
+from opentelemetry.trace import Status, StatusCode
+
 import os
 import shutil
 import sys
@@ -241,7 +247,20 @@ def __process_arguments(args: List[str]):
     add_arguments(parser)
     return parser.parse_args(args)
 
+# This is the exporter that sends data to Application Insights
+exporter = AzureMonitorTraceExporter(
+    connection_string=os.environ["APPLICATIONINSIGHTS_CONNECTION_STRING"]
+)
+tracer_provider = TracerProvider()
+span_processor = BatchSpanProcessor(exporter)
+tracer_provider.add_span_processor(span_processor)
+trace.set_tracer_provider(tracer_provider)
+tracer = trace.get_tracer(__name__)
+
+@tracer.start_as_current_span(name="main")
 def main(argv: List[str]):
+    span = trace.get_current_span()
+    span.add_event("main started")
     validate_supported_runtime()
     args = __process_arguments(argv)
     verbose = not args.quiet
@@ -332,13 +351,16 @@ def main(argv: List[str]):
 
             helix_upload_root = helixuploadroot()
             if helix_upload_root is not None:
+                span.add_event("Uploading artifacts to Helix")
                 for file in glob(globpath, recursive=True):
                     shutil.copy(file, os.path.join(helix_upload_root, file.split(os.sep)[-1]))
             else:
                 getLogger().info("Skipping upload of artifacts to Helix as HELIX_WORKITEM_UPLOAD_ROOT environment variable is not set.")
 
-        except CalledProcessError:
+        except CalledProcessError as ex:
             getLogger().info("Run failure registered")
+            span.set_status(Status(StatusCode.ERROR))
+            span.record_exception(ex)
             # rethrow the caught CalledProcessError exception so that the exception being bubbled up correctly.
             raise
 
@@ -350,12 +372,16 @@ def main(argv: List[str]):
             upload_code = upload.upload(globpath, upload_container, UPLOAD_QUEUE, UPLOAD_TOKEN_VAR, UPLOAD_STORAGE_URI)
             getLogger().info("Benchmarks Upload Code: " + str(upload_code))
             if upload_code != 0:
+                span.add_event("main finished with upload failure")
                 sys.exit(upload_code)
         # TODO: Archive artifacts.
 
         # Still return 1 so that the build pipeline shows failures even though there were some successful results
         if run_contains_errors:
+            span.add_event("main finished with run errors")
             sys.exit(1)
+        
+        span.add_event("main finished successfully")
 
 if __name__ == "__main__":
     main(sys.argv[1:])
