@@ -125,6 +125,9 @@ def get_repo_root_path() -> str:
 
 def get_tools_directory() -> str:
     '''Gets the default root directory where tools should be installed.'''
+    helix_payload = helixpayload()
+    if helix_payload != None:
+        return os.path.join(os.environ["HELIX_CORRELATION_PAYLOAD"], 'tools')
     return os.path.join(get_repo_root_path(), 'tools')
 
 
