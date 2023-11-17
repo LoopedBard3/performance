@@ -247,23 +247,35 @@ def __process_arguments(args: List[str]):
     add_arguments(parser)
     return parser.parse_args(args)
 
-# This is the exporter that sends data to Application Insights
-exporter = AzureMonitorTraceExporter(
-    connection_string=os.environ["APPLICATIONINSIGHTS_CONNECTION_STRING"]
-)
-tracer_provider = TracerProvider()
-span_processor = BatchSpanProcessor(exporter)
-tracer_provider.add_span_processor(span_processor)
-trace.set_tracer_provider(tracer_provider)
-tracer = trace.get_tracer(__name__)
-
-@tracer.start_as_current_span(name="main")
-def main(argv: List[str]):
-    span = trace.get_current_span()
-    span.add_event("main started")
+def main(argv: List[str]):    
     validate_supported_runtime()
     args = __process_arguments(argv)
     verbose = not args.quiet
+
+    parent_span_id = "4c476cfaa48b27fe5b11fc4f5d7c84f3"
+    # This is the exporter that sends data to Application Insights
+    exporter = AzureMonitorTraceExporter(
+        connection_string=os.environ["APPLICATIONINSIGHTS_CONNECTION_STRING"]
+    )
+
+    tracer_provider = TracerProvider()
+    span_processor = BatchSpanProcessor(exporter)
+    tracer_provider.add_span_processor(span_processor)
+    trace.set_tracer_provider(tracer_provider)
+    tracer = trace.get_tracer(__name__)
+
+    if parent_span_id and False:
+        span_context = trace.Context(parent_id=parent_span_id, is_remote=True)
+        tracer.start_as_current_span("main", kind=trace.SpanKind.CLIENT, context=span_context)
+    else:
+        tracer.start_as_current_span("main-benchmarks-ci", kind=trace.SpanKind.CLIENT)
+    span = trace.get_current_span()
+    span.add_event("main started")
+    span.set_attributes({
+        "component": "benchmarks_ci",
+        "architecture": args.architecture,
+        "framework": args.frameworks
+    })
 
     if not args.skip_logger_setup:
         setup_loggers(verbose=verbose)
@@ -382,6 +394,7 @@ def main(argv: List[str]):
             sys.exit(1)
         
         span.add_event("main finished successfully")
+        span.end()
 
 if __name__ == "__main__":
     main(sys.argv[1:])
