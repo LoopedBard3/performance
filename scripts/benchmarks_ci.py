@@ -30,7 +30,7 @@ import shutil
 import sys
 from typing import Any, List, Optional
 
-from performance.common import validate_supported_runtime, get_artifacts_directory, helixuploadroot
+from performance.common import validate_supported_runtime, get_artifacts_directory, helixuploadroot, get_tools_directory
 from performance.logger import setup_loggers
 from performance.constants import UPLOAD_CONTAINER, UPLOAD_STORAGE_URI, UPLOAD_TOKEN_VAR, UPLOAD_QUEUE
 from channel_map import ChannelMap
@@ -255,8 +255,15 @@ def main(argv: List[str]):
     target_framework_monikers = dotnet \
         .FrameworkAction \
         .get_target_framework_monikers(args.frameworks)
+    
+    getLogger().info("Printing tools directory information")
+    for root, dirs, files in os.walk(get_tools_directory()):
+        for file in files:
+            print(os.path.join(root, file))
+
     # Acquire necessary tools (dotnet)
-    if not args.dotnet_path:
+    if not args.dotnet_path and not os.environ.get('DOTNET_ROOT'):
+        getLogger().info('Init tools.')
         init_tools(
             architecture=args.architecture,
             dotnet_versions=args.dotnet_versions,
@@ -266,7 +273,9 @@ def main(argv: List[str]):
             internal_build_key=args.internal_build_key
         )
     else:
-        dotnet.setup_dotnet(args.dotnet_path)
+        dotnet_path = args.dotnet_path if args.dotnet_path else os.environ.get('DOTNET_ROOT')
+        getLogger().info(f'Skipping init tools. Using custom dotnet path {args.dotnet_path}.')
+        dotnet.setup_dotnet(str(dotnet_path))
 
     # WORKAROUND
     # The MicroBenchmarks.csproj targets .NET Core 2.1, 3.0, 3.1 and 5.0
