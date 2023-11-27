@@ -46,7 +46,8 @@ def init_tools(
         target_framework_monikers: List[str],
         verbose: bool,
         azure_feed_url: Optional[str] = None,
-        internal_build_key: Optional[str] = None) -> None:
+        internal_build_key: Optional[str] = None,
+        install_dir: Optional[str] = None) -> None:
     '''
     Install tools used by this repository into the tools folder.
     This function writes a semaphore file when tools have been successfully
@@ -66,6 +67,7 @@ def init_tools(
         channels=channels,
         versions=dotnet_versions,
         verbose=verbose,
+        install_dir=install_dir,
         azure_feed_url=azure_feed_url,
         internal_build_key=internal_build_key
     )
@@ -262,20 +264,19 @@ def main(argv: List[str]):
             print(os.path.join(root, file))
 
     # Acquire necessary tools (dotnet)
-    if not args.dotnet_path and not os.environ.get('DOTNET_ROOT'):
+    if not args.dotnet_path:
         getLogger().info('Init tools.')
         init_tools(
             architecture=args.architecture,
             dotnet_versions=args.dotnet_versions,
             target_framework_monikers=target_framework_monikers,
             verbose=verbose,
+            install_dir= os.environ.get('DOTNET_ROOT') if os.environ.get('DOTNET_ROOT') else None,
             azure_feed_url=args.azure_feed_url,
             internal_build_key=args.internal_build_key
         )
     else:
-        dotnet_path = args.dotnet_path if args.dotnet_path else os.environ.get('DOTNET_ROOT')
-        getLogger().info(f'Skipping init tools. Using custom dotnet path {args.dotnet_path}.')
-        dotnet.setup_dotnet(str(dotnet_path))
+        dotnet.setup_dotnet(args.dotnet_path)
 
     # WORKAROUND
     # The MicroBenchmarks.csproj targets .NET Core 2.1, 3.0, 3.1 and 5.0
