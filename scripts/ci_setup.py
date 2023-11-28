@@ -388,7 +388,7 @@ def main(args: Any):
     variable_format = 'set "%s=%s"\n' if args.target_windows else 'export %s="%s"\n'
     path_variable = 'set PATH=%s;%%PATH%%\n' if args.target_windows else 'export PATH=%s:$PATH\n'
     which = 'where dotnet\n' if args.target_windows else 'which dotnet\n'
-    dotnet_path = '%HELIX_CORRELATION_PAYLOAD%\\dotnet' if args.target_windows else '$HELIX_CORRELATION_PAYLOAD/dotnet'
+    dotnet_path = f'%HELIX_CORRELATION_PAYLOAD%\\tools\\dotnet\\{args.architecture}' if args.target_windows else f'$HELIX_CORRELATION_PAYLOAD/tools/dotnet/{args.architecture}'
     owner, repo = ('dotnet', 'core-sdk') if repo_url is None else (dotnet.get_repository(repo_url))
     config_string = ';'.join(args.build_configs) if args.target_windows else "%s" % ';'.join(args.build_configs)
     pgo_config = ''

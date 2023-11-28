@@ -30,7 +30,7 @@ import shutil
 import sys
 from typing import Any, List, Optional
 
-from performance.common import validate_supported_runtime, get_artifacts_directory, helixuploadroot, get_tools_directory
+from performance.common import validate_supported_runtime, get_artifacts_directory, helixuploadroot, get_tools_directory, helixpayload
 from performance.logger import setup_loggers
 from performance.constants import UPLOAD_CONTAINER, UPLOAD_STORAGE_URI, UPLOAD_TOKEN_VAR, UPLOAD_QUEUE
 from channel_map import ChannelMap
@@ -258,10 +258,26 @@ def main(argv: List[str]):
         .FrameworkAction \
         .get_target_framework_monikers(args.frameworks)
     
-    getLogger().info("Printing tools directory information")
-    for root, dirs, files in os.walk(get_tools_directory()):
+    getLogger().info(f"Printing Helix Correlation Payload directory information: {os.environ.get('HELIX_CORRELATION_PAYLOAD')}")
+    for root, dirs, files in os.walk(str(os.environ.get('HELIX_CORRELATION_PAYLOAD'))):
         for file in files:
             print(os.path.join(root, file))
+
+    getLogger().info(f"Printing Helix Workitem Payload directory information: {os.environ.get('HELIX_WORKITEM_PAYLOAD')}")
+    for root, dirs, files in os.walk(str(os.environ.get('HELIX_WORKITEM_PAYLOAD'))):
+        for file in files:
+            print(os.path.join(root, file))
+
+    getLogger().info(f"Printing Helix Workitem Root directory information: {os.environ.get('HELIX_WORKITEM_ROOT')}")
+    for root, dirs, files in os.walk(str(os.environ.get('HELIX_WORKITEM_ROOT'))):
+        for file in files:
+            print(os.path.join(root, file))
+
+    import subprocess
+    dotnet_package_path = os.path.join(str(os.environ.get('DOTNET_ROOT')), 'sdk', '8.0.101') if os.environ.get('DOTNET_ROOT') else None
+    command = f"powershell.exe Test-Path {dotnet_package_path} -PathType Container"
+    result = subprocess.run(command, capture_output=True, text=True, shell=True)
+    print(f"Command '{command}' result: {result.stdout.strip()}")
 
     # Acquire necessary tools (dotnet)
     if not args.dotnet_path:
@@ -271,7 +287,7 @@ def main(argv: List[str]):
             dotnet_versions=args.dotnet_versions,
             target_framework_monikers=target_framework_monikers,
             verbose=verbose,
-            install_dir= os.environ.get('DOTNET_ROOT') if os.environ.get('DOTNET_ROOT') else None,
+            install_dir=os.environ.get('DOTNET_ROOT') if os.environ.get('DOTNET_ROOT') else None,
             azure_feed_url=args.azure_feed_url,
             internal_build_key=args.internal_build_key
         )
