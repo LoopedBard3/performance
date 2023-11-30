@@ -380,7 +380,13 @@ ex: C:\repos\performance;C:\repos\runtime
             ]
             screen_off_timeout_cmd = RunCommand(cmdline, verbose=True)
             screen_off_timeout_cmd.run()
-            getLogger().info(f"Retrieved values window {window_animation_scale_cmd.stdout.strip()}, transition {transition_animation_scale_cmd.stdout.strip()}, animator {animator_duration_scale_cmd.stdout.strip()}, screen timeout {screen_off_timeout_cmd.stdout.strip()}")
+            cmdline = [
+                adb.stdout.strip(),
+                'shell', 'settings', 'get', 'global', 'verifier_verify_adb_installs'
+            ]
+            verifier_verify_adb_installs_scale_cmd = RunCommand(cmdline, verbose=True)
+            verifier_verify_adb_installs_scale_cmd.run()
+            getLogger().info(f"Retrieved values window {window_animation_scale_cmd.stdout.strip()}, transition {transition_animation_scale_cmd.stdout.strip()}, animator {animator_duration_scale_cmd.stdout.strip()}, screen timeout {screen_off_timeout_cmd.stdout.strip()}, verifier {verifier_verify_adb_installs_scale_cmd.stdout.strip()}")
 
             # Make sure animations are set to 1 or disabled
             getLogger().info("Setting needed values")
@@ -411,6 +417,11 @@ ex: C:\repos\performance;C:\repos\runtime
             if minimumTimeoutValue > int(screen_off_timeout_cmd.stdout.strip()):
                 getLogger().info("Screen off value is lower than minimum time, setting to higher time")
                 RunCommand(cmdline, verbose=True).run()
+            cmdline = [
+                adb.stdout.strip(),
+                'shell', 'settings', 'put', 'global', 'verifier_verify_adb_installs', '0'
+            ]
+            RunCommand(cmdline, verbose=True).run()
 
             # Check for success
             getLogger().info("Getting animation values to verify it worked")
@@ -629,6 +640,11 @@ ex: C:\repos\performance;C:\repos\runtime
                 cmdline = [
                     adb.stdout.strip(),
                     'shell', 'settings', 'put', 'system', 'screen_off_timeout', screen_off_timeout_cmd.stdout.strip()
+                ]
+                RunCommand(cmdline, verbose=True).run()
+                cmdline = [
+                    adb.stdout.strip(),
+                    'shell', 'settings', 'put', 'global', 'verifier_verify_adb_installs', verifier_verify_adb_installs_scale_cmd.stdout.strip()
                 ]
                 RunCommand(cmdline, verbose=True).run()
 
