@@ -27,7 +27,7 @@ from logging import getLogger
 
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 from azure.monitor.opentelemetry.exporter import AzureMonitorTraceExporter
 from opentelemetry.trace import Status, StatusCode
 
@@ -41,6 +41,7 @@ from performance.logger import setup_loggers
 from performance.constants import UPLOAD_CONTAINER, UPLOAD_STORAGE_URI, UPLOAD_TOKEN_VAR, UPLOAD_QUEUE
 from channel_map import ChannelMap
 from subprocess import CalledProcessError
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 from glob import glob
 
 import dotnet
@@ -247,154 +248,170 @@ def __process_arguments(args: List[str]):
     add_arguments(parser)
     return parser.parse_args(args)
 
+# This is the exporter that sends data to Application Insights
+exporter = AzureMonitorTraceExporter(
+    connection_string=os.environ["APPLICATIONINSIGHTS_CONNECTION_STRING"]
+)
+
+tracer_provider = TracerProvider()
+span_processor = BatchSpanProcessor(exporter)
+tracer_provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
+tracer_provider.add_span_processor(span_processor)
+trace.set_tracer_provider(tracer_provider)
+tracer = trace.get_tracer(__name__)
+
 def main(argv: List[str]):    
     validate_supported_runtime()
     args = __process_arguments(argv)
     verbose = not args.quiet
 
-    parent_span_id = "4c476cfaa48b27fe5b11fc4f5d7c84f3"
-    # This is the exporter that sends data to Application Insights
-    exporter = AzureMonitorTraceExporter(
-        connection_string=os.environ["APPLICATIONINSIGHTS_CONNECTION_STRING"]
-    )
-
-    tracer_provider = TracerProvider()
-    span_processor = BatchSpanProcessor(exporter)
-    tracer_provider.add_span_processor(span_processor)
-    trace.set_tracer_provider(tracer_provider)
-    tracer = trace.get_tracer(__name__)
-
-    if parent_span_id and False:
-        span_context = trace.Context(parent_id=parent_span_id, is_remote=True)
-        tracer.start_as_current_span("main", kind=trace.SpanKind.CLIENT, context=span_context)
-    else:
-        tracer.start_as_current_span("main-benchmarks-ci", kind=trace.SpanKind.CLIENT)
-    span = trace.get_current_span()
-    span.add_event("main started")
-    span.set_attributes({
-        "component": "benchmarks_ci",
-        "architecture": args.architecture,
-        "framework": args.frameworks
-    })
-
-    if not args.skip_logger_setup:
-        setup_loggers(verbose=verbose)
-
-    if not args.frameworks:
-        raise Exception("Framework version (-f) must be specified.")
-
-    target_framework_monikers = dotnet \
-        .FrameworkAction \
-        .get_target_framework_monikers(args.frameworks)
-    # Acquire necessary tools (dotnet)
-    if not args.dotnet_path:
-        init_tools(
-            architecture=args.architecture,
-            dotnet_versions=args.dotnet_versions,
-            target_framework_monikers=target_framework_monikers,
-            verbose=verbose,
-            azure_feed_url=args.azure_feed_url,
-            internal_build_key=args.internal_build_key
+    parent_span_id = os.environ.get("PERFLAB_PARENT_SPAN_ID")
+    parent_trace_id = os.environ.get("PERFLAB_PARENT_TRACE_ID")
+    parent_context = None
+    if parent_span_id and parent_trace_id:
+        print("Parent span found, starting new span with it as parent")
+        parent_context = trace.SpanContext(
+            trace_id=int(parent_trace_id),
+            span_id=int(parent_span_id),
+            is_remote=True
         )
     else:
-        dotnet.setup_dotnet(args.dotnet_path)
+        print("No parent span found, starting new span")
+    carrier = {'traceparent': '00-2874e7e8aea68f390947bbbdbdbae323-8057bbbe5867339a-01'}
+    # # Then we use a propagator to get a context from it.
+    ctx = TraceContextTextMapPropagator().extract(carrier=carrier)
+    print(f'Parent Context: {parent_context}')
+    import random
+    random_id = random.randint(0, 1000000)
+    print(f'Random ID: {random_id}')
+    # with tracer.start_as_current_span(f"main-benchmarks-ci-{random_id}", context=trace.set_span_in_context(trace.NonRecordingSpan(parent_context)) if parent_context else None) as span:
+    with tracer.start_as_current_span(f"main-benchmarks-ci-{random_id}", context=ctx) as span:
+        print(f'Carrier: {carrier}')
+        print(f'Span ID: {span.get_span_context().span_id} - {hex(span.get_span_context().span_id)}, Trace ID: {span.get_span_context().trace_id} - {hex(span.get_span_context().trace_id)}')
+        span.add_event(f"main started - {random_id}")
+        span.set_attributes({
+            "component": "benchmarks_ci",
+            "architecture": args.architecture,
+            "framework": args.frameworks
+        })
 
-    # WORKAROUND
-    # The MicroBenchmarks.csproj targets .NET Core 2.1, 3.0, 3.1 and 5.0
-    # to avoid a build failure when using older frameworks (error NETSDK1045:
-    # The current .NET SDK does not support targeting .NET Core $XYZ)
-    # we set the TFM to what the user has provided.
-    os.environ['PERFLAB_TARGET_FRAMEWORKS'] = ';'.join(
-        target_framework_monikers
-    )
+        # if not args.skip_logger_setup:
+        #     setup_loggers(verbose=verbose)
 
-    # dotnet --info
-    dotnet.info(verbose=verbose)
+        # if not args.frameworks:
+        #     raise Exception("Framework version (-f) must be specified.")
 
-    bin_dir_to_use=micro_benchmarks.get_bin_dir_to_use(args.csprojfile, args.bin_directory, args.run_isolated)
-    BENCHMARKS_CSPROJ = dotnet.CSharpProject(
-        project=args.csprojfile,
-        bin_directory=bin_dir_to_use
-    )
+        # target_framework_monikers = dotnet \
+        #     .FrameworkAction \
+        #     .get_target_framework_monikers(args.frameworks)
+        # # Acquire necessary tools (dotnet)
+        # if not args.dotnet_path:
+        #     init_tools(
+        #         architecture=args.architecture,
+        #         dotnet_versions=args.dotnet_versions,
+        #         target_framework_monikers=target_framework_monikers,
+        #         verbose=verbose,
+        #         azure_feed_url=args.azure_feed_url,
+        #         internal_build_key=args.internal_build_key
+        #     )
+        # else:
+        #     dotnet.setup_dotnet(args.dotnet_path)
 
-    if not args.run_only:
-        # .NET micro-benchmarks
-        # Restore and build micro-benchmarks
-        micro_benchmarks.build(
-            BENCHMARKS_CSPROJ,
-            args.configuration,
-            target_framework_monikers,
-            args.incremental,
-            args.run_isolated,
-            args.wasm,
-            verbose
-        )
+        # WORKAROUND
+        # The MicroBenchmarks.csproj targets .NET Core 2.1, 3.0, 3.1 and 5.0
+        # to avoid a build failure when using older frameworks (error NETSDK1045:
+        # The current .NET SDK does not support targeting .NET Core $XYZ)
+        # # we set the TFM to what the user has provided.
+        # os.environ['PERFLAB_TARGET_FRAMEWORKS'] = ';'.join(
+        #     target_framework_monikers
+        # )
 
-    # Run micro-benchmarks
-    if not args.build_only:
-        run_contains_errors = False
-        upload_container = UPLOAD_CONTAINER
-        try:
-            for framework in args.frameworks:
-                is_success = micro_benchmarks.run(
-                    BENCHMARKS_CSPROJ,
-                    args.configuration,
-                    framework,
-                    args.run_isolated,
-                    verbose,
-                    args
-                )
+        # # dotnet --info
+        # dotnet.info(verbose=verbose)
 
-                if not is_success:
-                    getLogger().warning(f"Benchmark run for framework '{framework}' contains errors")
-                    run_contains_errors = True
+        # bin_dir_to_use=micro_benchmarks.get_bin_dir_to_use(args.csprojfile, args.bin_directory, args.run_isolated)
+        # BENCHMARKS_CSPROJ = dotnet.CSharpProject(
+        #     project=args.csprojfile,
+        #     bin_directory=bin_dir_to_use
+        # )
 
-            artifacts_dir = get_artifacts_directory() if not args.bdn_artifacts else args.bdn_artifacts
+        # if not args.run_only:
+        #     # .NET micro-benchmarks
+        #     # Restore and build micro-benchmarks
+        #     micro_benchmarks.build(
+        #         BENCHMARKS_CSPROJ,
+        #         args.configuration,
+        #         target_framework_monikers,
+        #         args.incremental,
+        #         args.run_isolated,
+        #         args.wasm,
+        #         verbose
+        #     )
 
-            combined_file_prefix = "" if args.partition is None else f"Partition{args.partition}-"
-            globpath = os.path.join(artifacts_dir, '**', '*perf-lab-report.json')
-            all_reports: List[Any] = []
-            for file in glob(globpath, recursive=True):
-                with open(file, 'r', encoding="utf8") as report_file:
-                    all_reports.append(json.load(report_file))
+        # # Run micro-benchmarks
+        # if not args.build_only:
+        #     run_contains_errors = False
+        #     upload_container = UPLOAD_CONTAINER
+        #     try:
+        #         for framework in args.frameworks:
+        #             is_success = micro_benchmarks.run(
+        #                 BENCHMARKS_CSPROJ,
+        #                 args.configuration,
+        #                 framework,
+        #                 args.run_isolated,
+        #                 verbose,
+        #                 args
+        #             )
 
-            with open(os.path.join(artifacts_dir, f"{combined_file_prefix}combined-perf-lab-report.json"), "w", encoding="utf8") as all_reports_file:
-                json.dump(all_reports, all_reports_file)
+        #             if not is_success:
+        #                 getLogger().warning(f"Benchmark run for framework '{framework}' contains errors")
+        #                 run_contains_errors = True
 
-            helix_upload_root = helixuploadroot()
-            if helix_upload_root is not None:
-                span.add_event("Uploading artifacts to Helix")
-                for file in glob(globpath, recursive=True):
-                    shutil.copy(file, os.path.join(helix_upload_root, file.split(os.sep)[-1]))
-            else:
-                getLogger().info("Skipping upload of artifacts to Helix as HELIX_WORKITEM_UPLOAD_ROOT environment variable is not set.")
+            #     artifacts_dir = get_artifacts_directory() if not args.bdn_artifacts else args.bdn_artifacts
 
-        except CalledProcessError as ex:
-            getLogger().info("Run failure registered")
-            span.set_status(Status(StatusCode.ERROR))
-            span.record_exception(ex)
-            # rethrow the caught CalledProcessError exception so that the exception being bubbled up correctly.
-            raise
+            #     combined_file_prefix = "" if args.partition is None else f"Partition{args.partition}-"
+            #     globpath = os.path.join(artifacts_dir, '**', '*perf-lab-report.json')
+            #     all_reports: List[Any] = []
+            #     for file in glob(globpath, recursive=True):
+            #         with open(file, 'r', encoding="utf8") as report_file:
+            #             all_reports.append(json.load(report_file))
 
-        dotnet.shutdown_server(verbose)
+            #     with open(os.path.join(artifacts_dir, f"{combined_file_prefix}combined-perf-lab-report.json"), "w", encoding="utf8") as all_reports_file:
+            #         json.dump(all_reports, all_reports_file)
 
-        if args.upload_to_perflab_container:
-            globpath = os.path.join(artifacts_dir, '**', '*perf-lab-report.json')
-            import upload
-            upload_code = upload.upload(globpath, upload_container, UPLOAD_QUEUE, UPLOAD_TOKEN_VAR, UPLOAD_STORAGE_URI)
-            getLogger().info("Benchmarks Upload Code: " + str(upload_code))
-            if upload_code != 0:
-                span.add_event("main finished with upload failure")
-                sys.exit(upload_code)
-        # TODO: Archive artifacts.
+            #     helix_upload_root = helixuploadroot()
+            #     if helix_upload_root is not None:
+            #         span.add_event("Uploading artifacts to Helix")
+            #         for file in glob(globpath, recursive=True):
+            #             shutil.copy(file, os.path.join(helix_upload_root, file.split(os.sep)[-1]))
+            #     else:
+            #         getLogger().info("Skipping upload of artifacts to Helix as HELIX_WORKITEM_UPLOAD_ROOT environment variable is not set.")
 
-        # Still return 1 so that the build pipeline shows failures even though there were some successful results
-        if run_contains_errors:
-            span.add_event("main finished with run errors")
-            sys.exit(1)
-        
-        span.add_event("main finished successfully")
-        span.end()
+            # except CalledProcessError as ex:
+            #     getLogger().info("Run failure registered")
+            #     span.set_status(Status(StatusCode.ERROR))
+            #     span.record_exception(ex)
+            #     # rethrow the caught CalledProcessError exception so that the exception being bubbled up correctly.
+            #     raise
+
+            # dotnet.shutdown_server(verbose)
+
+            # if args.upload_to_perflab_container:
+            #     globpath = os.path.join(artifacts_dir, '**', '*perf-lab-report.json')
+            #     import upload
+            #     upload_code = upload.upload(globpath, upload_container, UPLOAD_QUEUE, UPLOAD_TOKEN_VAR, UPLOAD_STORAGE_URI)
+            #     getLogger().info("Benchmarks Upload Code: " + str(upload_code))
+            #     if upload_code != 0:
+            #         span.add_event("main finished with upload failure")
+            #         sys.exit(upload_code)
+            # # TODO: Archive artifacts.
+
+            # Still return 1 so that the build pipeline shows failures even though there were some successful results
+            # if run_contains_errors:
+            #     span.add_event("main finished with run errors")
+            #     sys.exit(1)
+            
+        span.add_event(f"main finished successfully - {random_id}")
 
 if __name__ == "__main__":
     main(sys.argv[1:])
