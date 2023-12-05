@@ -275,10 +275,13 @@ def main(argv: List[str]):
     #         print(os.path.join(root, file))
 
     import subprocess
-    dotnet_package_path = os.path.join(str(os.environ.get('DOTNET_ROOT')), 'sdk', '8.0.101') if os.environ.get('DOTNET_ROOT') else None
+    dotnet_package_path = os.path.join(str(os.environ.get('DOTNET_ROOT')), 'sdk', str(os.environ.get('DOTNET_VERSION'))) if os.environ.get('DOTNET_ROOT') else None
     command = f"powershell.exe Test-Path {dotnet_package_path} -PathType Container"
     result = subprocess.run(command, capture_output=True, text=True, shell=True)
     print(f"Command '{command}' result: {result.stdout.strip()}")
+    command_nopro = f"powershell.exe -NoProfile -ExecutionPolicy Bypass Test-Path {dotnet_package_path} -PathType Container"
+    result = subprocess.run(command, capture_output=True, text=True, shell=True)
+    print(f"Command '{command}' result: {result.stdout.strip()}; Command_nopro '{command_nopro}' result: {result.stdout.strip()}")
 
     # Acquire necessary tools (dotnet)
     if not args.dotnet_path:
