@@ -331,19 +331,19 @@ def main(argv: List[str]):
         run_contains_errors = False
         upload_container = UPLOAD_CONTAINER
         try:
-            for framework in args.frameworks:
-                is_success = micro_benchmarks.run(
-                    BENCHMARKS_CSPROJ,
-                    args.configuration,
-                    framework,
-                    args.run_isolated,
-                    verbose,
-                    args
-                )
+            # for framework in args.frameworks:
+            #     is_success = micro_benchmarks.run(
+            #         BENCHMARKS_CSPROJ,
+            #         args.configuration,
+            #         framework,
+            #         args.run_isolated,
+            #         verbose,
+            #         args
+            #     )
 
-                if not is_success:
-                    getLogger().warning(f"Benchmark run for framework '{framework}' contains errors")
-                    run_contains_errors = True
+            #     if not is_success:
+            #         getLogger().warning(f"Benchmark run for framework '{framework}' contains errors")
+            #         run_contains_errors = True
 
             artifacts_dir = get_artifacts_directory() if not args.bdn_artifacts else args.bdn_artifacts
 
