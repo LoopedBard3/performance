@@ -743,8 +743,8 @@ function Resolve-Installation-Path([string]$InstallDir) {
 
 function Is-Dotnet-Package-Installed([string]$InstallRoot, [string]$RelativePathToPackage, [string]$SpecificVersion) {
     Say-Invocation $MyInvocation
-    
-    Say-Verbose "Is-Dotnet-Package-Installed: Printing out $InstallRoot contents"
+    $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+    Say-Verbose "Is-Dotnet-Package-Installed: Printing out $InstallRoot contents for user $user"
     $results = Get-ChildItem -Path $InstallRoot -Recurse | Where-Object Name -match dotnet
     if ($null -ne $results -and $results.PSobject.Properties.Name -contains "Count" -and $results.Count -gt 0) {
         Say-Verbose "Number of results: $($results.Count)"

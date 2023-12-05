@@ -26,6 +26,7 @@ import json
 from logging import getLogger
 
 import os
+import getpass
 import shutil
 import sys
 from typing import Any, List, Optional
@@ -257,7 +258,7 @@ def main(argv: List[str]):
     target_framework_monikers = dotnet \
         .FrameworkAction \
         .get_target_framework_monikers(args.frameworks)
-    
+    getLogger().info(f'Running as user: {getpass.getuser()}')
     getLogger().info(f"Printing Helix Correlation Payload directory information: {os.environ.get('HELIX_CORRELATION_PAYLOAD')}")
     for root, dirs, files in os.walk(str(os.environ.get('HELIX_CORRELATION_PAYLOAD'))):
         for file in files:
