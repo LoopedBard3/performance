@@ -263,15 +263,15 @@ def main(argv: List[str]):
         for file in files:
             print(os.path.join(root, file))
 
-    getLogger().info(f"Printing Helix Workitem Payload directory information: {os.environ.get('HELIX_WORKITEM_PAYLOAD')}")
-    for root, dirs, files in os.walk(str(os.environ.get('HELIX_WORKITEM_PAYLOAD'))):
-        for file in files:
-            print(os.path.join(root, file))
+    # getLogger().info(f"Printing Helix Workitem Payload directory information: {os.environ.get('HELIX_WORKITEM_PAYLOAD')}")
+    # for root, dirs, files in os.walk(str(os.environ.get('HELIX_WORKITEM_PAYLOAD'))):
+    #     for file in files:
+    #         print(os.path.join(root, file))
 
-    getLogger().info(f"Printing Helix Workitem Root directory information: {os.environ.get('HELIX_WORKITEM_ROOT')}")
-    for root, dirs, files in os.walk(str(os.environ.get('HELIX_WORKITEM_ROOT'))):
-        for file in files:
-            print(os.path.join(root, file))
+    # getLogger().info(f"Printing Helix Workitem Root directory information: {os.environ.get('HELIX_WORKITEM_ROOT')}")
+    # for root, dirs, files in os.walk(str(os.environ.get('HELIX_WORKITEM_ROOT'))):
+    #     for file in files:
+    #         print(os.path.join(root, file))
 
     import subprocess
     dotnet_package_path = os.path.join(str(os.environ.get('DOTNET_ROOT')), 'sdk', '8.0.101') if os.environ.get('DOTNET_ROOT') else None

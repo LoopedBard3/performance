@@ -341,7 +341,7 @@ class CiSetupArgs:
         self.experiment_name = experiment_name
 
 def main(args: Any):
-    verbose = not args.quiet
+    verbose = True
     setup_loggers(verbose=verbose)
 
     # if repository is not set, then we are doing a core-sdk in performance repo run
