@@ -94,7 +94,7 @@ class DevicePowerConsumptionHelper(object):
                 import upload
                 upload.upload(self.reportjson, upload_container, UPLOAD_QUEUE, UPLOAD_TOKEN_VAR, UPLOAD_STORAGE_URI)
 
-    def runtestsandroid(self, packagepath: str, packagename: str, testiterations: int, runtimeseconds: int, closeToStartDelay: int, traits: TestTraits):
+    def runtestsandroid(self, packagepath: str, packagename: str, ykushcmdpath:str, testiterations: int, runtimeseconds: int, closeToStartDelay: int, traits: TestTraits):
         getLogger().info("Clearing potential previous run nettraces")
         for file in glob.glob(os.path.join(const.TRACEDIR, 'PerfTest', 'runoutput.trace')):
             if os.path.exists(file):   
@@ -102,14 +102,27 @@ class DevicePowerConsumptionHelper(object):
                 os.remove(file)
 
         androidHelper = AndroidHelper()
+
+        # Ensure the yepkit commands are accessible in the finally block
+        listYepkitBoardsCmd = [
+            ykushcmdpath,
+            'ykushxs',
+            '-l'
+        ]
+
+        disconnectYepKitPowerCmd = [
+            ykushcmdpath,
+            'ykushxs',
+            '-d'
+        ]
+
+        reconnectYepKitPowerCmd = [
+            ykushcmdpath,
+            'ykushxs',
+            '-u'
+        ]
         try:
             androidHelper.setup_device(packagename, packagepath, False, False)
-
-            listYepkitBoardsCmd = [
-                'ykushcmd',
-                'ykushxs',
-                '-l'
-            ]
 
             # Create the fullydrawn command
             clearBatteryStatsCmd = [ 
@@ -118,18 +131,6 @@ class DevicePowerConsumptionHelper(object):
                 'dumpsys',
                 'batterystats',
                 '--reset'
-            ]
-
-            disconnectYepKitPowerCmd = [
-                'ykushcmd',
-                'ykushxs',
-                '-d'
-            ]
-
-            reconnectYepKitPowerCmd = [
-                'ykushcmd',
-                'ykushxs',
-                '-u'
             ]
 
             clearLogsCmd = [
@@ -261,6 +262,7 @@ class DevicePowerConsumptionHelper(object):
                 time.sleep(closeToStartDelay) # Delay in seconds for ensuring a cold start
                 
         finally:
+            RunCommand(reconnectYepKitPowerCmd, verbose=True).run() # Make sure the board is re-connected
             androidHelper.close_device()
 
         # Create traces to store the data so we can keep the current general parse trace flow
@@ -274,13 +276,13 @@ class DevicePowerConsumptionHelper(object):
 
         self.parsetraces(traits)
 
-    def runtests(self, devicetype: str, packagepath: str, packagename: str, testiterations: int, runtimeseconds: int, closeToStartDelay: int, traits: TestTraits):
+    def runtests(self, devicetype: str, packagepath: str, packagename: str, ykushcmdpath:str, testiterations: int, runtimeseconds: int, closeToStartDelay: int, traits: TestTraits):
         '''
         Runs Device Power Consumption tests.
         '''
         try:
             if devicetype == 'android':
-                self.runtestsandroid(packagepath, packagename, testiterations, runtimeseconds, closeToStartDelay, traits)
+                self.runtestsandroid(packagepath, packagename, ykushcmdpath, testiterations, runtimeseconds, closeToStartDelay, traits)
 
         except CalledProcessError:
             getLogger().info("Run failure registered")
