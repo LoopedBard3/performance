@@ -102,25 +102,27 @@ class DevicePowerConsumptionHelper(object):
                 os.remove(file)
 
         androidHelper = AndroidHelper()
+        ykushcmd = os.path.join(ykushcmdpath, 'ykushcmd')
 
         # Ensure the yepkit commands are accessible in the finally block
         listYepkitBoardsCmd = [
-            ykushcmdpath,
+            ykushcmd,
             'ykushxs',
             '-l'
         ]
 
         disconnectYepKitPowerCmd = [
-            ykushcmdpath,
+            ykushcmd,
             'ykushxs',
             '-d'
         ]
 
         reconnectYepKitPowerCmd = [
-            ykushcmdpath,
+            ykushcmd,
             'ykushxs',
             '-u'
         ]
+        
         try:
             androidHelper.setup_device(packagename, packagepath, False, False)
 

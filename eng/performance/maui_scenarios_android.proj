@@ -86,9 +86,9 @@
       <PreCommands>echo on; set XHARNESSPATH=$(XharnessPath); xcopy %HELIX_CORRELATION_PAYLOAD%\$(PreparePayloadOutDirectoryName)\%(HelixWorkItem.ScenarioDirectoryName) %HELIX_WORKITEM_ROOT%\pub\ /E /I /Y</PreCommands>
       <Command>$(Python) test.py devicememoryconsumption -1-device-type android -1-package-path pub\%(HelixWorkItem.ApkName).apk -1-package-name %(HelixWorkItem.PackageName) -1-scenario-name &quot;%(Identity)&quot; -1-runtime 30 -1-test-iteration 2</Command>
     </HelixWorkItem> -->
-    <HelixWorkItem Include="@(MAUIAndroidScenario -> 'Power Consumption - %(Identity)')">
+    <HelixWorkItem Include="@(MAUIAndroidScenario -> 'Power Consumption - %(Identity)')" Condition="!$(HelixTargetQueue.ToLowerInvariant().Contains('galaxy'))">
       <PreCommands>echo on; set XHARNESSPATH=$(XharnessPath); xcopy %HELIX_CORRELATION_PAYLOAD%\$(PreparePayloadOutDirectoryName)\%(HelixWorkItem.ScenarioDirectoryName) %HELIX_WORKITEM_ROOT%\pub\ /E /I /Y</PreCommands>
-      <Command>$(Python) test.py devicepowerconsumption --device-type android --package-path pub\%(HelixWorkItem.ApkName).apk --package-name %(HelixWorkItem.PackageName) --scenario-name &quot;%(Identity)&quot; --runtime 90 --test-iteration 2</Command>
+      <Command>$(Python) test.py devicepowerconsumption --device-type android --package-path pub\%(HelixWorkItem.ApkName).apk --package-name %(HelixWorkItem.PackageName) --ykushcmd-path "D:\Program Files\Yepkit-ykushcmd" --scenario-name &quot;%(Identity)&quot; --runtime 90 --test-iteration 2</Command>
     </HelixWorkItem>
   </ItemGroup>
 
