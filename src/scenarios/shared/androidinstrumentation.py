@@ -8,6 +8,7 @@ from logging import getLogger
 from shutil import copytree
 from performance.common import runninginlab, RunCommand
 from performance.constants import UPLOAD_CONTAINER, UPLOAD_STORAGE_URI, UPLOAD_TOKEN_VAR, UPLOAD_QUEUE
+from scenarios.shared.androidhelper import AndroidHelper
 from shared.util import helixuploaddir, uploadtokenpresent, xharnesscommand
 from shared.const import *
 from subprocess import CalledProcessError
@@ -26,22 +27,19 @@ class AndroidInstrumentationHelper(object):
 
             # Do not remove, XHarness install seems to fail without an adb command called before the xharness command
             getLogger().info("Preparing ADB")
-            adbpath = adb.stdout.strip()
+            androidHelper = AndroidHelper()
             try:
-                installCmd = [
-                    adbpath,
+                installCmd = androidHelper.adbcommand + [
                     'install',
                     packagepath,
                 ]
                 
-                clearLogsCmd = [
-                    adbpath,
+                clearLogsCmd = androidHelper.adbcommand + [
                     'logcat',
                     '-c'
                 ]
 
-                startInstrumentationCmd = [
-                    adbpath,
+                startInstrumentationCmd = androidHelper.adbcommand + [
                     'shell',
                     'am',
                     'instrument',
@@ -49,8 +47,7 @@ class AndroidInstrumentationHelper(object):
                     f'{packagename}/{instrumentationname}'
                 ]
                 
-                printMauiLogsCmd = [
-                    adbpath,
+                printMauiLogsCmd = androidHelper.adbcommand + [
                     'shell',
                     'logcat',
                     '-d',
@@ -77,8 +74,7 @@ class AndroidInstrumentationHelper(object):
                 
                 ## Get logs off device and upload to helix (TODO: Make this optional, potentially add different methods of getting logs)
                 defaultDeviceBdnOutputDir = f'/sdcard/Android/data/{packagename}/files/'
-                pullFilesFromDeviceCmd = [
-                    adbpath,
+                pullFilesFromDeviceCmd = androidHelper.adbcommand + [
                     'pull',
                     defaultDeviceBdnOutputDir,
                     TRACEDIR

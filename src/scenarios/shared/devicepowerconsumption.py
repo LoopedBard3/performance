@@ -112,8 +112,7 @@ class DevicePowerConsumptionHelper(object):
             ]
 
             # Create the fullydrawn command
-            clearBatteryStatsCmd = [ 
-                androidHelper.adbpath,
+            clearBatteryStatsCmd = androidHelper.adbcommand + [
                 'shell',
                 'dumpsys',
                 'batterystats',
@@ -132,14 +131,12 @@ class DevicePowerConsumptionHelper(object):
                 '-u'
             ]
 
-            clearLogsCmd = [
-                androidHelper.adbpath,
+            clearLogsCmd = androidHelper.adbcommand + [
                 'logcat',
                 '-c'
             ]
 
-            getUidOfPackageCmd = [
-                androidHelper.adbpath,
+            getUidOfPackageCmd = androidHelper.adbcommand + [
                 'shell',
                 'cmd',
                 'package',
@@ -150,8 +147,7 @@ class DevicePowerConsumptionHelper(object):
             ]
 
             # Gets information about the battery (https://cs.android.com/android/platform/superproject/main/+/main:frameworks/base/services/core/java/com/android/server/BatteryService.java;l=1117-1119?q=%22Current%20Battery%20Service%20state%22)
-            getGeneralBatteryInformation = [
-                androidHelper.adbpath,
+            getGeneralBatteryInformation = androidHelper.adbcommand + [
                 'shell',
                 'dumpsys',
                 'battery'
@@ -194,8 +190,7 @@ class DevicePowerConsumptionHelper(object):
                 uid = uidCapture.group(1)
 
                 # Include the uid filter to keep the output smaller
-                captureBatteryStatsCmd = [
-                    androidHelper.adbpath,
+                captureBatteryStatsCmd = androidHelper.adbcommand + [
                     'shell',
                     'dumpsys',
                     'batterystats',
