@@ -8,7 +8,7 @@ from logging import getLogger
 from shutil import copytree
 from performance.common import runninginlab, RunCommand
 from performance.constants import UPLOAD_CONTAINER, UPLOAD_STORAGE_URI, UPLOAD_TOKEN_VAR, UPLOAD_QUEUE
-from scenarios.shared.androidhelper import AndroidHelper
+from shared.androidhelper import AndroidHelper
 from shared.util import helixuploaddir, uploadtokenpresent, xharnesscommand
 from shared.const import *
 from subprocess import CalledProcessError
