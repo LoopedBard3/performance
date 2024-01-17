@@ -25,6 +25,19 @@ class AndroidHelper:
 
         # Do not remove, XHarness install seems to fail without an adb command called before the xharness command
         getLogger().info("Preparing ADB")
+        cmdline = [
+            "xharness",
+            "android",
+            "state"
+        ]
+        RunCommand(cmdline, verbose=True).run()
+
+        cmdline = self.adbcommand + [
+            'devices',
+            '-l'
+        ]
+        RunCommand(cmdline, verbose=True).run()
+        
         cmdline = self.adbcommand + [
             'shell',
             'wm',
