@@ -260,6 +260,8 @@ jobs:
         projectFile: maui_scenarios_android.proj
         channels:
           - release/7.0
+        env:
+          JAVA_HOME: JAVA_HOME_11_X64
   
   # Maui iOS scenario benchmarks
   - template: /eng/performance/build_machine_matrix.yml
