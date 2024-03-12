@@ -28,7 +28,7 @@ def update_blob_by_workitem(workitem_name:str) -> None:
     try:
         enable_download = True
         enable_update = True and enable_download
-        enable_upload = False and enable_download
+        enable_upload = False and enable_update
         # Get, download, update, and upload file names to the queue
         getLogger().warning("Processing blobs for %s", workitem_name)
         blob_count = 0
@@ -36,15 +36,15 @@ def update_blob_by_workitem(workitem_name:str) -> None:
             if blob_url.endswith("combined-perf-lab-report.json"):
                 continue
             blob_count += 1
-            getLogger().warning("Processing blob %d in %s", blob_count, workitem_name)
+            getLogger().debug("Processing blob %d in %s", blob_count, workitem_name)
             blobclient = container_client.get_blob_client(blob_url)
             data = None
             # Download the file
             if enable_download:
-                getLogger().warning("Downloading %s", blob_url)
+                getLogger().debug("Downloading %s", blob_url)
                 try:
                     data = json.loads(blobclient.download_blob().readall())
-                    getLogger().warning("Downloaded %s with branch %s", blob_url, data["build"]["branch"])
+                    getLogger().debug("Downloaded %s with branch %s", blob_url, data["build"]["branch"])
                     if data is None:
                         getLogger().error("download failed for blob %s", blob_url)
                         raise Exception("download failed for blob %s", blob_url)
@@ -54,34 +54,34 @@ def update_blob_by_workitem(workitem_name:str) -> None:
             # Update the file
             updated_data = ""
             if enable_update and data is not None and data["build"]["repo"] == "dotnet/core-sdk" and data["build"]["branch"] == "refs/heads/main":
-                getLogger().warning("Updating %s", blob_url)
+                getLogger().debug("Updating %s", blob_url)
                 if data is not None and data["build"]["repo"] == "dotnet/core-sdk" and data["build"]["branch"] == "refs/heads/main":
                     tfm = data["build"]["additionalData"]["targetFrameworks"]
                     productVersion = data["build"]["additionalData"]["productVersion"]
-                    getLogger().warning("Found targetFrameworks: %s and productVersion: %s for blob %s", tfm, productVersion, blob_url)
+                    getLogger().debug("Found targetFrameworks: %s and productVersion: %s for blob %s", tfm, productVersion, blob_url)
                     if tfm is not None and productVersion is not None and tfm[3] == productVersion[0] and (tfm[3] == "8" or tfm[3] == "9"):
                         data["build"]["branch"] = tfm[3] + ".0"
                         updated_data = json.dumps(data)
-                        getLogger().warning("Updated %s with branch %s", blob_url, data["build"]["branch"])
+                        getLogger().debug("Updated %s with branch %s", blob_url, data["build"]["branch"])
                     elif tfm is not None and productVersion is not None and tfm[3] != productVersion[0]:
                         getLogger().error("targetFrameworks: %s and productVersion: %s do not match for blob %s", tfm, productVersion, blob_url)
             # Upload the file
             if enable_upload and updated_data != "":
-                getLogger().warning("Uploading %s", blob_url)
+                getLogger().debug("Uploading %s", blob_url)
                 full_blob_url = f"{blob_url}{sas_token}"
                 upload_succeded = False
                 try:
                     retry_on_exception(functools.partial(blobclient.upload_blob, updated_data, blob_type="BlockBlob", content_settings=ContentSettings(content_type="application/json")), raise_exceptions=[ResourceExistsError])
                     upload_succeded = True
                 except Exception as ex:
-                    getLogger().error("upload failed")
+                    getLogger().error("upload failed for blob %s", full_blob_url)
                     getLogger().error('%s: %s', type(ex), str(ex))
                 if upload_succeded:
                     try:
                         retry_on_exception(functools.partial(queue_client.send_message, full_blob_url))
-                        getLogger().warning("upload and queue complete for %s", full_blob_url)
+                        getLogger().debug("upload and queue complete for %s", full_blob_url)
                     except Exception as ex:
-                        getLogger().error("queue failed")
+                        getLogger().error("queue failed for workitem %s", workitem_name)
                         getLogger().error('%s: %s', type(ex), str(ex))
             getLogger().warning("Processed %d blobs for %s", blob_count, workitem_name)
     except Exception as ex:
