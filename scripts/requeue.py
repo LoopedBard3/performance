@@ -8,7 +8,7 @@ import time
 import requests
 from performance.common import retry_on_exception
 
-# For each link in MissingURIs.csv, read the corresponding uri, parse out the perf-lab-report.json file names, and upload them to the queue
+# For each link in MissingURIs.csv (link to console.log), read the corresponding uri, parse out the perf-lab-report.json file names, and upload them to the queue
 # Get env var for sas token
 sas_token = os.getenv('SAS_TOKEN')
 queue_client = QueueClient(account_url="https://pvscmdupload.queue.core.windows.net", queue_name="resultsqueue", credential=sas_token, message_encode_policy=TextBase64EncodePolicy())
