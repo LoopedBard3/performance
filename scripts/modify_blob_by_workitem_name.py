@@ -15,20 +15,22 @@ from performance.common import retry_on_exception
 
 # For each link in MissingURIs.csv (link to console.log), read the corresponding uri, parse out the perf-lab-report.json file names, and upload them to the queue
 # Get env var for sas token
+pool_size = 16
 sas_token = os.getenv('SAS_TOKEN')
 setup_loggers(False)
 sess = requests.Session()
-adapter = requests.adapters.HTTPAdapter(pool_connections=16, pool_maxsize=16)
+adapter = requests.adapters.HTTPAdapter(pool_connections=pool_size, pool_maxsize=pool_size)
 sess.mount('https://', adapter)
 queue_client = QueueClient(account_url="https://pvscmdupload.queue.core.windows.net", queue_name="resultsqueue", credential=sas_token, message_encode_policy=TextBase64EncodePolicy())
 container_client = ContainerClient(account_url="https://pvscmdupload.blob.core.windows.net", container_name="results", credential=sas_token, message_encode_policy=TextBase64EncodePolicy(), session=sess)
-pool = ThreadPool(16)
+pool = ThreadPool(pool_size)
+failed_workitems = []
 
 def update_blob_by_workitem(workitem_name:str) -> None:
     try:
         enable_download = True
         enable_update = True and enable_download
-        enable_upload = False and enable_update
+        enable_upload = True and enable_update
         # Get, download, update, and upload file names to the queue
         getLogger().warning("Processing blobs for %s", workitem_name)
         blob_count = 0
@@ -49,6 +51,7 @@ def update_blob_by_workitem(workitem_name:str) -> None:
                         getLogger().error("download failed for blob %s", blob_url)
                         raise Exception("download failed for blob %s", blob_url)
                 except Exception as ex:
+                    failed_workitems.append(workitem_name)
                     getLogger().error("download failed for blob %s workitem %s", blob_url, workitem_name)
                     getLogger().error('%s: %s', type(ex), str(ex))
             # Update the file
@@ -61,19 +64,20 @@ def update_blob_by_workitem(workitem_name:str) -> None:
                     getLogger().debug("Found targetFrameworks: %s and productVersion: %s for blob %s", tfm, productVersion, blob_url)
                     if tfm is not None and productVersion is not None and tfm[3] == productVersion[0] and (tfm[3] == "8" or tfm[3] == "9"):
                         data["build"]["branch"] = tfm[3] + ".0"
-                        updated_data = json.dumps(data)
+                        updated_data = json.dumps(data, indent=2)
                         getLogger().debug("Updated %s with branch %s", blob_url, data["build"]["branch"])
                     elif tfm is not None and productVersion is not None and tfm[3] != productVersion[0]:
                         getLogger().error("targetFrameworks: %s and productVersion: %s do not match for blob %s", tfm, productVersion, blob_url)
             # Upload the file
             if enable_upload and updated_data != "":
-                getLogger().debug("Uploading %s", blob_url)
-                full_blob_url = f"{blob_url}{sas_token}"
+                full_blob_url = f"https://pvscmdupload.blob.core.windows.net/results/{blob_url}{sas_token}"
+                getLogger().debug("Uploading %s full_url %s", blob_url, full_blob_url)
                 upload_succeded = False
                 try:
-                    retry_on_exception(functools.partial(blobclient.upload_blob, updated_data, blob_type="BlockBlob", content_settings=ContentSettings(content_type="application/json")), raise_exceptions=[ResourceExistsError])
+                    retry_on_exception(functools.partial(blobclient.upload_blob, updated_data, blob_type="BlockBlob", content_settings=ContentSettings(content_type="application/json"), overwrite=True), raise_exceptions=[ResourceExistsError])
                     upload_succeded = True
                 except Exception as ex:
+                    failed_workitems.append(workitem_name)
                     getLogger().error("upload failed for blob %s", full_blob_url)
                     getLogger().error('%s: %s', type(ex), str(ex))
                 if upload_succeded:
@@ -81,10 +85,12 @@ def update_blob_by_workitem(workitem_name:str) -> None:
                         retry_on_exception(functools.partial(queue_client.send_message, full_blob_url))
                         getLogger().debug("upload and queue complete for %s", full_blob_url)
                     except Exception as ex:
+                        failed_workitems.append(workitem_name)
                         getLogger().error("queue failed for workitem %s", workitem_name)
                         getLogger().error('%s: %s', type(ex), str(ex))
-            getLogger().warning("Processed %d blobs for %s", blob_count, workitem_name)
+        getLogger().warning("Processed %d blobs for %s", blob_count, workitem_name)
     except Exception as ex:
+        failed_workitems.append(workitem_name)
         getLogger().error('%s: %s', type(ex), str(ex))
         getLogger().error("Failed to process workitem %s", workitem_name)
 
@@ -100,6 +106,12 @@ with open('WorkitemNamesToUpdateSample.csv', 'r') as file:
     pool.close()
     pool.join()
 
+if len(failed_workitems) > 0:
+    getLogger().error("Failed to process workitems: %s", failed_workitems)
+    with open('FailedWorkitems.csv', 'w') as file:
+        csv_writer = csv.writer(file)
+        for workitem in failed_workitems:
+            csv_writer.writerow([workitem])
 end_time = time.time()
 runtime = end_time - start_time
 getLogger().warning(f"Runtime: {runtime} seconds")
