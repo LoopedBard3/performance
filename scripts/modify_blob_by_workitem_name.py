@@ -30,7 +30,7 @@ def update_blob_by_workitem(workitem_name:str) -> None:
     try:
         enable_download = True
         enable_update = True and enable_download
-        enable_upload = True and enable_update
+        enable_upload = False and enable_update
         # Get, download, update, and upload file names to the queue
         getLogger().warning("Processing blobs for %s", workitem_name)
         blob_count = 0
@@ -95,7 +95,7 @@ def update_blob_by_workitem(workitem_name:str) -> None:
         getLogger().error("Failed to process workitem %s", workitem_name)
 
 start_time = time.time()
-with open('WorkitemNamesToUpdateSample.csv', 'r') as file:
+with open('WorkitemNamesToUpdate.csv', 'r') as file:
     csv_reader = csv.reader(file)
     workitems : list[str] = []
     for row in csv_reader:
