@@ -157,3 +157,15 @@ jobs:
       queue: OSX.13.Amd64.Iphone.Perf
       machinePool: iPhoneMini12
       ${{ insert }}: ${{ parameters.jobParameters }}
+
+- ${{ if and(containsValue(parameters.buildMachines, 'osx-x64-ios-arm64-old'), not(eq(parameters.isPublic, true))) }}: # iPhone ARM64 12mini only used in private builds currently
+  - template: ${{ parameters.jobTemplate }}
+    parameters:
+      osName: osx
+      architecture: x64
+      osVersion: 13
+      pool:
+        vmImage: 'macos-13'
+      queue: OSX.Amd64.Iphone.Perf
+      machinePool: iPhoneMini12Old
+      ${{ insert }}: ${{ parameters.jobParameters }}

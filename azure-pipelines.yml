@@ -391,6 +391,7 @@ jobs:
       jobTemplate: /eng/performance/scenarios.yml
       buildMachines:
         - osx-x64-ios-arm64
+        - osx-x64-ios-arm64-old
       isPublic: false
       jobParameters:
         kind: maui_scenarios_ios
@@ -406,6 +407,7 @@ jobs:
       jobTemplate: /eng/performance/scenarios.yml
       buildMachines:
         - osx-x64-ios-arm64
+        - osx-x64-ios-arm64-old
       isPublic: false
       jobParameters:
         kind: maui_scenarios_ios
