@@ -57,7 +57,7 @@ jobs:
 # Public correctness jobs
 ######################################################
 
-- ${{ if or(eq(variables['System.TeamProject'], 'public'), parameters.runPublicJobs) }}:
+# - ${{ if or(eq(variables['System.TeamProject'], 'public'), parameters.runPublicJobs) }}:
 
   # # Scenario benchmarks
   # - template: /eng/performance/build_machine_matrix.yml
@@ -457,7 +457,7 @@ jobs:
 ################################################
 
 # Scheduled runs will run all of the jobs on the PerfTigers, as well as the Arm64 job
-- ${{ if or(and(and(ne(variables['System.TeamProject'], 'public'), in(variables['Build.Reason'], 'Schedule')), not(contains(variables['Build.QueuedBy'], 'Weekly'))), parameters.runScheduledPrivateJobs) }}:
+# - ${{ if or(and(and(ne(variables['System.TeamProject'], 'public'), in(variables['Build.Reason'], 'Schedule')), not(contains(variables['Build.QueuedBy'], 'Weekly'))), parameters.runScheduledPrivateJobs) }}:
 
   # # SDK scenario benchmarks
   # - template: /eng/performance/build_machine_matrix.yml

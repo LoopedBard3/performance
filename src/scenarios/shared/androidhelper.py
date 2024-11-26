@@ -22,15 +22,15 @@ class AndroidHelper:
         runSplitRegex = r":\s(.+)" 
         self.screenwasoff = False
         self.packagename = packagename
-        cmdline = xharnesscommand() + ['android', 'state', '--adb']
-        adb = RunCommand(cmdline, verbose=True)
-        adb.run()
+        # cmdline = xharnesscommand() + ['android', 'state', '--adb']
+        # adb = RunCommand(cmdline, verbose=True)
+        # adb.run()
+        xadb = xharnesscommand() + ['android', 'adb', '--']
 
         # Do not remove, XHarness install seems to fail without an adb command called before the xharness command
         getLogger().info("Preparing ADB")
-        self.adbpath = adb.stdout.strip()
-        cmdline = [
-            self.adbpath,
+        #self.adbpath = adb.stdout.strip()
+        cmdline = xadb + [
             'shell',
             'wm',
             'size'
@@ -39,29 +39,25 @@ class AndroidHelper:
 
         # Get animation values
         getLogger().info("Getting Values we will need set specifically")
-        cmdline = [
-            self.adbpath,
+        cmdline = xadb + [
             'shell', 'settings', 'get', 'global', 'window_animation_scale'
         ]
         window_animation_scale_cmd = RunCommand(cmdline, verbose=True)
         window_animation_scale_cmd.run()
         self.startwindowanimationscale = window_animation_scale_cmd.stdout.strip()
-        cmdline = [
-            self.adbpath,
+        cmdline = xadb + [
             'shell', 'settings', 'get', 'global', 'transition_animation_scale'
         ]
         transition_animation_scale_cmd = RunCommand(cmdline, verbose=True)
         transition_animation_scale_cmd.run()
         self.starttransitionanimationscale = transition_animation_scale_cmd.stdout.strip()
-        cmdline = [
-            self.adbpath,
+        cmdline = xadb + [
             'shell', 'settings', 'get', 'global', 'animator_duration_scale'
         ]
         animator_duration_scale_cmd = RunCommand(cmdline, verbose=True)
         animator_duration_scale_cmd.run()
         self.startanimatordurationscale = animator_duration_scale_cmd.stdout.strip()
-        cmdline = [
-            self.adbpath,
+        cmdline = xadb + [
             'shell', 'settings', 'get', 'system', 'screen_off_timeout'
         ]
         screen_off_timeout_cmd = RunCommand(cmdline, verbose=True)
@@ -76,23 +72,19 @@ class AndroidHelper:
         else:
             animationValue = 1
         minimumTimeoutValue = 2 * 60 * 1000 # milliseconds
-        cmdline = [
-            self.adbpath,
+        cmdline = xadb + [
             'shell', 'settings', 'put', 'global', 'window_animation_scale', str(animationValue)
         ]
         RunCommand(cmdline, verbose=True).run()
-        cmdline = [
-            self.adbpath,
+        cmdline = xadb + [
             'shell', 'settings', 'put', 'global', 'transition_animation_scale', str(animationValue)
         ]
         RunCommand(cmdline, verbose=True).run()
-        cmdline = [
-            self.adbpath,
+        cmdline = xadb + [
             'shell', 'settings', 'put', 'global', 'animator_duration_scale', str(animationValue)
         ]
         RunCommand(cmdline, verbose=True).run()
-        cmdline = [
-            self.adbpath,
+        cmdline = xadb + [
             'shell', 'settings', 'put', 'system', 'screen_off_timeout', str(minimumTimeoutValue)
         ]
         if minimumTimeoutValue > int(screen_off_timeout_cmd.stdout.strip()):
@@ -101,20 +93,17 @@ class AndroidHelper:
 
         # Check for success
         getLogger().info("Getting animation values to verify it worked")
-        cmdline = [
-            self.adbpath,
+        cmdline = xadb + [
             'shell', 'settings', 'get', 'global', 'window_animation_scale'
         ]
         windowSetValue = RunCommand(cmdline, verbose=True)
         windowSetValue.run()
-        cmdline = [
-            self.adbpath,
+        cmdline = xadb + [
             'shell', 'settings', 'get', 'global', 'transition_animation_scale'
         ]
         transitionSetValue = RunCommand(cmdline, verbose=True)
         transitionSetValue.run()
-        cmdline = [
-            self.adbpath,
+        cmdline = xadb + [
             'shell', 'settings', 'get', 'global', 'animator_duration_scale'
         ]
         animatorSetValue = RunCommand(cmdline, verbose=True)
@@ -275,23 +264,19 @@ class AndroidHelper:
 
         # Reset animation values 
         getLogger().info("Resetting animation values to pretest values")
-        cmdline = [
-            self.adbpath,
+        cmdline = xadb + [
             'shell', 'settings', 'put', 'global', 'window_animation_scale', self.startwindowanimationscale
         ]
         RunCommand(cmdline, verbose=True).run()
-        cmdline = [
-            self.adbpath,
+        cmdline = xadb + [
             'shell', 'settings', 'put', 'global', 'transition_animation_scale', self.starttransitionanimationscale
         ]
         RunCommand(cmdline, verbose=True).run()
-        cmdline = [
-            self.adbpath,
+        cmdline = xadb + [
             'shell', 'settings', 'put', 'global', 'animator_duration_scale', self.startanimatordurationscale
         ]
         RunCommand(cmdline, verbose=True).run()
-        cmdline = [
-            self.adbpath,
+        cmdline = xadb + [
             'shell', 'settings', 'put', 'system', 'screen_off_timeout', self.startscreenofftimeout
         ]
         RunCommand(cmdline, verbose=True).run()
