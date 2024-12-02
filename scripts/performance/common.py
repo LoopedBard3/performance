@@ -317,7 +317,11 @@ class RunCommand:
                 getLogger().info("[PROC] Process has completed with status %s", poll_status)
                 if thread_set:
                     getLogger().info("[PROC] Joining thread")
-                    thread.join() # type: ignore
+                    thread_count = 0
+                    while thread.is_alive(): #type: ignore
+                        thread.join(5.0) # type: ignore
+                        getLogger().info("[PROC] Thread is still alive, waiting... %d", thread_count)
+                        thread_count += 1
                 getLogger().info("[PROC] Returning process return code %s for command line %s", proc.returncode, quoted_cmdline)
                 getLogger().info("[RUNINTERNAL] Returning from POPEN")
                 return (proc.returncode, quoted_cmdline)
