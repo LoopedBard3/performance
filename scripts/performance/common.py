@@ -315,6 +315,12 @@ class RunCommand:
                     time.sleep(1)
                     poll_status = proc.poll()
                 getLogger().info("[PROC] Process has completed with status %s", poll_status)
+
+                if proc.stdout is not None:
+                    getLogger().info("[PROC] Closing stdout(s)")
+                    proc.stdout.close()
+                    self.__stdout.close()
+                    
                 if thread_set:
                     getLogger().info("[PROC] Joining thread")
                     thread_count = 0
