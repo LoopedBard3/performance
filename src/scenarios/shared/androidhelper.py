@@ -115,8 +115,7 @@ class AndroidHelper:
         else:
             getLogger().info(f"Animation values successfully set to {animationValue}.")
 
-        self.stopappcommand = [ 
-            self.adbpath,
+        self.stopappcommand = xadb + [
             'shell',
             'am',
             'force-stop',
@@ -136,8 +135,7 @@ class AndroidHelper:
         RunCommand(installCmd, verbose=True).run()
 
         getLogger().info("Completed install, running shell.")
-        cmdline = [ 
-            self.adbpath,
+        cmdline = xadb + [
             'shell',
             f'cmd package resolve-activity --brief {self.packagename} | tail -n 1'
         ]
@@ -146,8 +144,7 @@ class AndroidHelper:
         getLogger().info(f"Target Activity {getActivity.stdout}")
 
         # More setup stuff
-        checkScreenOnCmd = [ 
-            self.adbpath,
+        checkScreenOnCmd = xadb + [
             'shell',
             f'dumpsys input_method | grep mInteractive'
         ]
@@ -179,8 +176,7 @@ class AndroidHelper:
         self.activityname = getActivity.stdout.strip()
 
         # -W in the start command waits for the app to finish initial draw.
-        self.startappcommand = [ 
-            self.adbpath,
+        self.startappcommand = xadb + [
             'shell',
             'am',
             'start-activity',
@@ -220,8 +216,7 @@ class AndroidHelper:
                 getLogger().exception("Failed to get past permission screen, run locally to see if enough next button presses were used.")
                 raise Exception("Failed to get past permission screen, run locally to see if enough next button presses were used.")
             
-        self.startappcommand = [ 
-            self.adbpath,
+        self.startappcommand = xadb + [
             'shell',
             'am',
             'start-activity'
