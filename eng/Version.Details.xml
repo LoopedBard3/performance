@@ -67,8 +67,8 @@
       <Sha>763d10a1a251be35337ee736832bfde3f9200672</Sha>
       <Uri>https://github.com/dotnet/emsdk</Uri>
     </Dependency>
-    <Dependency Name="Microsoft.Android.Sdk.Windows" Version="35.0.27" CoherentParentDependency="Microsoft.Maui.Controls">
-      <Sha>ea2da3ef867ba4d2c400c1075fbd75683cb8b56e</Sha>
+    <Dependency Name="Microsoft.Android.Sdk.Windows" Version="35.0.28" CoherentParentDependency="Microsoft.Maui.Controls">
+      <Sha>5b103af0d16dc15ea6ca4eb1fb99eab9b9787a90</Sha>
       <Uri>https://github.com/dotnet/android</Uri>
     </Dependency>
     <Dependency Name="Microsoft.MacCatalyst.Sdk.net9.0_18.0" Version="18.0.9617" CoherentParentDependency="Microsoft.Maui.Controls">
