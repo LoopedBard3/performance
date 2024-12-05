@@ -234,6 +234,7 @@ def read_output(pipe: IO[bytes], output_buffer: StringIO):
             line = line.rstrip()
             getLogger().info("[RDOUT %d]: %s", counter, line)
             counter += 1
+        
 class RunCommand:
     '''
     This is a class wrapper around `subprocess.Popen` with an additional set
@@ -319,7 +320,6 @@ class RunCommand:
                 if proc.stdout is not None:
                     getLogger().info("[PROC] Closing stdout(s)")
                     proc.stdout.close()
-                    self.__stdout.close()
                     
                 if thread_set:
                     getLogger().info("[PROC] Joining thread")
