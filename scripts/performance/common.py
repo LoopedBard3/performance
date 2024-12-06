@@ -233,6 +233,7 @@ def read_output(pipe: IO[bytes], output_buffer: StringIO):
             output_buffer.write(line)
             line = line.rstrip()
             #getLogger().info("[RDOUT %d]: %s", counter, line)
+            getLogger().info(line)
             counter += 1
         
 class RunCommand:
