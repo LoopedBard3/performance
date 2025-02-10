@@ -14,49 +14,49 @@ parameters:
   - name: crossgen
     type: object
     default:
-      enabled: true
+      enabled: false
       configs:
         - windows_x64
         - windows_x86
   - name: viperJitOptRepeat
     type: object
     default:
-      enabled: true
+      enabled: false
       configs:
         - windows_x64
         - linux_x64
   - name: viperMicro
     type: object
     default:
-      enabled: true
+      enabled: false
       configs:
         - windows_x64
         - linux_x64
   - name: owlMicro
     type: object
     default:
-      enabled: true
+      enabled: false
       configs:
         - windows_x64
         - linux_x64
   - name: tigerNoR2R
     type: object
     default:
-      enabled: true
+      enabled: false
       configs:
         - windows_x64
         - linux_x64
   - name: tigerNoPGO
     type: object
     default:
-      enabled: true
+      enabled: false
       configs:
         - windows_x64
         - linux_x64
   - name: tigerMicro
     type: object
     default:
-      enabled: true
+      enabled: false
       configs:
         - windows_x64
         - linux_x64
@@ -65,19 +65,19 @@ parameters:
   - name: tigerMonoAOT
     type: object
     default:
-      enabled: true
+      enabled: false
       configs:
         - linux_x64
   - name: tigerMonoInterpreter
     type: object
     default:
-      enabled: true
+      enabled: false
       configs:
         - linux_x64
   - name: tigerMono
     type: object
     default:
-      enabled: true
+      enabled: false
       configs:
         - linux_x64
   - name: androidMono
