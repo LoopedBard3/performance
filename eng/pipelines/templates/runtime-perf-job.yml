@@ -52,6 +52,9 @@ jobs:
         - ${{ if eq(parameters.runtimeType, 'iOSNativeAOT')}}:
           - ${{ 'build_ios_arm64_release_iOSNativeAOT' }}
 
+    ${{ if eq(parameters.runtimeType, 'AndroidMono')}}: # Run the AndroidMono tests even if the build for PerfBDN fails
+      continueOnError: true
+
     variables:
       - name: _crossBuildPropertyArg
         value: ''
