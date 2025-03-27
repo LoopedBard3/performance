@@ -400,8 +400,9 @@ jobs:
         runKind: maui_scenarios_android
         projectFileName: maui_scenarios_android.proj
         dotnetVersionsLinks:
-          9.0: ./eng/Version.Details.xml
+          10.0: ./eng/Version.Details.xml
         channels:
+          - 9.0
           - 8.0
         ${{ each parameter in parameters.jobParameters }}:
           ${{ parameter.key }}: ${{ parameter.value }}
@@ -417,8 +418,9 @@ jobs:
         runKind: maui_scenarios_ios
         projectFileName: maui_scenarios_ios.proj
         dotnetVersionsLinks:
-          9.0: ./eng/Version.Details.xml
+          10.0: ./eng/Version.Details.xml
         channels:
+          - 9.0
           - 8.0
         runtimeFlavor: mono
         additionalJobIdentifier: Mono
@@ -436,8 +438,9 @@ jobs:
         runKind: maui_scenarios_ios
         projectFileName: maui_scenarios_ios.proj
         dotnetVersionsLinks:
-          9.0: ./eng/Version.Details.xml
+          10.0: ./eng/Version.Details.xml
         channels:
+          - 9.0
           - 8.0
         runtimeFlavor: coreclr
         additionalJobIdentifier: CoreCLR
