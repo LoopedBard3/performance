@@ -88,9 +88,9 @@ def install_versioned_maui(precommands: PreCommands):
             f.write(response.read())
 
     workload_install_args = ['--configfile', 'MauiNuGet.config', '--skip-sign-check']
-    if int(target_framework_wo_platform.split('.')[0][3:]) > 9: # Use the rollback file for versions greater than 8 (should be set to only run for versions where we also use a specific dotnet version from the yml)
+    if int(target_framework_wo_platform.split('.')[0][3:]) > 9: # Use the rollback file for versions greater than 9 (should be set to only run for versions where we also use a specific dotnet version from the yml)
         rollback_dict = generate_maui_rollback_dict()
         dump_dict_to_json_file(rollback_dict, f"rollback_{target_framework_wo_platform}.json")
         workload_install_args += ['--from-rollback-file', f'rollback_{target_framework_wo_platform}.json']
 
-    precommands.install_workload('maui', workload_install_args) 
+    precommands.install_workload('maui', workload_install_args)

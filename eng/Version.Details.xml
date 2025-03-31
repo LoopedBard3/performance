@@ -71,10 +71,6 @@
       <Uri>https://github.com/dotnet/emsdk</Uri>
       <Sha>c17dd0e6bf60245f81e91cb85b96acf4b2b31c9c</Sha>
     </Dependency>
-    <Dependency Name="Microsoft.NET.Workload.Emscripten.Current.Manifest-9.0.100" Version="9.0.1" CoherentParentDependency="Microsoft.NETCore.App.Ref">
-      <Sha>4c9d1b112c16716c2479e054e9ad4db8b5b8c70c</Sha>
-      <Uri>https://github.com/dotnet/emsdk</Uri>
-    </Dependency>
     <Dependency Name="Microsoft.Android.Sdk.Windows" Version="36.0.0-preview.3.7">
       <Uri>https://github.com/dotnet/android</Uri>
       <Sha>2173aca13c88f396757c7d0b52ba8d1d8acc753e</Sha>
