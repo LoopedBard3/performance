@@ -4,9 +4,6 @@ parameters:
   jobTemplate: ''
   jobParameters: {}
 
-variables:
-  - template: /eng/common/templates/variables/pool-providers.yml
-
 jobs:
 - ${{ if containsValue(parameters.buildMachines, 'win-x64') }}:
   - template: ${{ parameters.jobTemplate }}

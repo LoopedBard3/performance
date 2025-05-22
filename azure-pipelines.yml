@@ -59,13 +59,16 @@ schedules:
     - main
   always: true
 
+variables:
+  - template: /eng/common/templates/variables/pool-providers.yml@self
+
 extends:
   template: v1/1ES.Official.PipelineTemplate.yml@1ESPipelineTemplates
   parameters:
     stages:
     - stage: Run
       jobs:
-        - template: /eng/pipelines/sdk-perf-jobs.yml
+        - template: /eng/pipelines/sdk-perf-jobs.yml@self
           parameters:
             ${{ if or(eq(variables['System.TeamProject'], 'public'), parameters.runPublicJobs) }}:
               runPublicJobs: true
