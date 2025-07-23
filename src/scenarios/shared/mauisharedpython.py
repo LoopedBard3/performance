@@ -15,6 +15,12 @@ def remove_aab_files(output_dir="."):
             os.remove(os.path.join(output_dir, file))  
 
 def generate_maui_rollback_dict():
+    # NOTE: The MAUI dependencies required for this method have been removed from /eng/Version.Details.xml
+    # If this method needs to be used again, the following dependencies must be re-added to Version.Details.xml:
+    # - Microsoft.Maui.Controls, Microsoft.NET.Sdk, Microsoft.NETCore.App.Ref, Microsoft.NET.Workload.Emscripten.Current.Manifest-*
+    # - Microsoft.Android.Sdk.Windows, Microsoft.MacCatalyst.Sdk.*, Microsoft.macOS.Sdk.*, Microsoft.iOS.Sdk.*, Microsoft.tvOS.Sdk.*
+    # along with their corresponding version mappings.
+    
     # Generate and use rollback based on Version.Details.xml
     # Generate the list of versions starts to get and the names to save them as in the rollback.
     # These mapping values were taken from the previously generated rollback files for the maui workload. There should be at least one entry for each
@@ -81,6 +87,12 @@ def dump_dict_to_json_file(dump_dict: dict[str, str], file_name: str):
         f.write(json_output)
 
 def install_versioned_maui(precommands: PreCommands):
+    # NOTE: The MAUI dependencies required for this method have been removed from /eng/Version.Details.xml
+    # If this method needs to be used again, the following dependencies must be re-added to Version.Details.xml:
+    # - Microsoft.Maui.Controls, Microsoft.NET.Sdk, Microsoft.NETCore.App.Ref, Microsoft.NET.Workload.Emscripten.Current.Manifest-*
+    # - Microsoft.Android.Sdk.Windows, Microsoft.MacCatalyst.Sdk.*, Microsoft.macOS.Sdk.*, Microsoft.iOS.Sdk.*, Microsoft.tvOS.Sdk.*
+    # along with their corresponding version mappings.
+    
     target_framework_wo_platform = precommands.framework.split('-')[0]
 
     # Download what we need
