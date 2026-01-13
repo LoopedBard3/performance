@@ -1,0 +1,719 @@
+"""
+Script to reupload failed workitem files from source Azure Blob Storage to target storage.
+
+This script:
+1. Reads WorkItemId and JobId from CSV
+2. Queries Kusto for file metadata (URI, FileName)
+3. Downloads files from source blob storage
+4. Uploads to target storage using existing upload infrastructure
+5. Tracks progress in SQLite database for resume capability
+"""
+
+import sys
+import csv
+import json
+import sqlite3
+import argparse
+import os
+import signal
+from datetime import datetime
+from typing import Optional, List, Dict, Tuple
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from logging import getLogger, INFO, basicConfig
+from dataclasses import dataclass
+
+# Azure SDK imports
+from azure.kusto.data import KustoClient, KustoConnectionStringBuilder
+from azure.kusto.data.exceptions import KustoServiceError
+from azure.identity import DefaultAzureCredential
+from azure.storage.blob import BlobClient
+from azure.storage.queue import QueueClient, TextBase64EncodePolicy
+from azure.core.exceptions import ResourceExistsError
+
+# Local imports
+from performance.common import retry_on_exception
+
+# QueueMessage class (from upload.py)
+class QueueMessage:
+    container_name: str
+    blob_name: str
+
+    def __init__(self, container: str, name: str):
+        self.container_name = container
+        self.blob_name = name
+
+# Configuration
+KUSTO_CLUSTER = "https://engsrvprod.kusto.windows.net/"
+KUSTO_DATABASE = "engineeringdata"
+TARGET_STORAGE_URI = "https://pvscmdupload.{}.core.windows.net"
+TARGET_CONTAINER = "results"
+TARGET_QUEUE = "resultsqueue"
+
+# Performance tuning
+MAX_WORKITEM_WORKERS = 20  # Parallel WorkItems
+MAX_FILE_WORKERS = 10      # Parallel files per WorkItem
+DOWNLOAD_CHUNK_SIZE = 4 * 1024 * 1024  # 4MB chunks for streaming
+
+
+@dataclass
+class FileMetadata:
+    """Metadata for a file to be reuploaded."""
+    job_id: str
+    workitem_id: str
+    workitem_name: str
+    source_uri: str
+    filename: str
+
+
+@dataclass
+class WorkItemStatus:
+    """Status of a WorkItem processing."""
+    workitem_id: str
+    job_id: str
+    status: str  # pending, in_progress, completed, failed
+    files_total: int
+    files_processed: int
+    error_message: Optional[str]
+    started_at: Optional[datetime]
+    completed_at: Optional[datetime]
+
+
+class StateTracker:
+    """SQLite-based state tracker for resume capability."""
+    
+    def __init__(self, db_path: str):
+        self.db_path = db_path
+        self.conn = sqlite3.connect(db_path, check_same_thread=False)
+        self._init_db()
+    
+    def _init_db(self):
+        """Initialize database schema."""
+        cursor = self.conn.cursor()
+        
+        # WorkItems table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS workitems (
+                workitem_id TEXT,
+                workitem_name TEXT,
+                job_id TEXT,
+                status TEXT,
+                files_total INTEGER DEFAULT 0,
+                files_processed INTEGER DEFAULT 0,
+                error_message TEXT,
+                started_at TEXT,
+                completed_at TEXT,
+                PRIMARY KEY (workitem_id, job_id)
+            )
+        """)
+        
+        # Files table for detailed tracking
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS files (
+                workitem_id TEXT,
+                job_id TEXT,
+                filename TEXT,
+                source_uri TEXT,
+                status TEXT,
+                error_message TEXT,
+                uploaded_at TEXT,
+                PRIMARY KEY (workitem_id, job_id, filename)
+            )
+        """)
+        
+        self.conn.commit()
+    
+    def add_workitem(self, workitem_id: str, workitem_name: str, job_id: str):
+        """Add a new workitem to track."""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT OR IGNORE INTO workitems (workitem_id, workitem_name, job_id, status)
+            VALUES (?, ?, ?, 'pending')
+        """, (workitem_id, workitem_name, job_id))
+        self.conn.commit()
+    
+    def update_workitem_status(self, workitem_id: str, job_id: str, status: str, 
+                               error_message: Optional[str] = None):
+        """Update workitem status."""
+        cursor = self.conn.cursor()
+        timestamp = datetime.utcnow().isoformat()
+        
+        if status == 'in_progress':
+            cursor.execute("""
+                UPDATE workitems 
+                SET status = ?, started_at = ?
+                WHERE workitem_id = ? AND job_id = ?
+            """, (status, timestamp, workitem_id, job_id))
+        elif status in ('completed', 'failed'):
+            cursor.execute("""
+                UPDATE workitems 
+                SET status = ?, completed_at = ?, error_message = ?
+                WHERE workitem_id = ? AND job_id = ?
+            """, (status, timestamp, error_message, workitem_id, job_id))
+        else:
+            cursor.execute("""
+                UPDATE workitems 
+                SET status = ?, error_message = ?
+                WHERE workitem_id = ? AND job_id = ?
+            """, (status, error_message, workitem_id, job_id))
+        
+        self.conn.commit()
+    
+    def update_workitem_file_count(self, workitem_id: str, job_id: str, files_total: int):
+        """Update the total file count for a workitem."""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            UPDATE workitems 
+            SET files_total = ?
+            WHERE workitem_id = ? AND job_id = ?
+        """, (files_total, workitem_id, job_id))
+        self.conn.commit()
+    
+    def add_file(self, workitem_id: str, job_id: str, filename: str, source_uri: str):
+        """Add a file to track."""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT OR IGNORE INTO files (workitem_id, job_id, filename, source_uri, status)
+            VALUES (?, ?, ?, ?, 'pending')
+        """, (workitem_id, job_id, filename, source_uri))
+        self.conn.commit()
+    
+    def update_file_status(self, workitem_id: str, job_id: str, filename: str, 
+                          status: str, error_message: Optional[str] = None):
+        """Update file upload status."""
+        cursor = self.conn.cursor()
+        timestamp = datetime.utcnow().isoformat()
+        
+        cursor.execute("""
+            UPDATE files 
+            SET status = ?, error_message = ?, uploaded_at = ?
+            WHERE workitem_id = ? AND job_id = ? AND filename = ?
+        """, (status, error_message, timestamp, workitem_id, job_id, filename))
+        
+        self.conn.commit()
+        
+        # Update workitem progress
+        if status == 'completed':
+            cursor.execute("""
+                UPDATE workitems 
+                SET files_processed = files_processed + 1
+                WHERE workitem_id = ? AND job_id = ?
+            """, (workitem_id, job_id))
+            self.conn.commit()
+    
+    def get_workitem_status(self, workitem_id: str, job_id: str) -> Optional[str]:
+        """Get current status of a workitem."""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT status FROM workitems 
+            WHERE workitem_id = ? AND job_id = ?
+        """, (workitem_id, job_id))
+        result = cursor.fetchone()
+        return result[0] if result else None
+    
+    def get_pending_workitems(self) -> List[Tuple[str, str]]:
+        """Get all workitems that are pending or failed."""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT workitem_id, job_id FROM workitems 
+            WHERE status IN ('pending', 'failed', 'in_progress')
+            ORDER BY workitem_id
+        """)
+        return cursor.fetchall()
+    
+    def get_summary(self) -> Dict[str, int]:
+        """Get summary statistics."""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT status, COUNT(*) FROM workitems GROUP BY status
+        """)
+        summary = dict(cursor.fetchall())
+        
+        cursor.execute("SELECT COUNT(*) FROM workitems")
+        summary['total'] = cursor.fetchone()[0]
+        
+        cursor.execute("""
+            SELECT SUM(files_total), SUM(files_processed) FROM workitems
+        """)
+        file_counts = cursor.fetchone()
+        summary['total_files'] = file_counts[0] or 0
+        summary['processed_files'] = file_counts[1] or 0
+        
+        return summary
+    
+    def close(self):
+        """Close database connection."""
+        self.conn.close()
+
+
+class KustoQueryHelper:
+    """Helper class for querying Kusto."""
+    
+    def __init__(self, cluster: str, database: str, credential: DefaultAzureCredential):
+        self.cluster = cluster
+        self.database = database
+        self.credential = credential
+        self.client = None
+    
+    def _get_client(self) -> KustoClient:
+        """Get or create Kusto client with Azure AD authentication."""
+        if self.client is None:
+            kcsb = KustoConnectionStringBuilder.with_azure_token_credential(
+                self.cluster,
+                self.credential
+            )
+            self.client = KustoClient(kcsb)
+        return self.client
+    
+    def query_files_for_workitem(self, workitem_id: str, job_id: str) -> List[FileMetadata]:
+        """Query Kusto for all files associated with a WorkItem."""
+        query = f"""
+        Files
+        | where JobId == "{job_id}" and WorkItemId == "{workitem_id}"
+        | where FileName endswith "perf-lab-report.json"
+        | project JobId, WorkItemId, WorkItemName, Uri, FileName
+        | order by FileName asc
+        """
+        
+        try:
+            client = self._get_client()
+            response = client.execute(self.database, query)
+            
+            files = []
+            for row in response.primary_results[0]:
+                files.append(FileMetadata(
+                    job_id=row['JobId'],
+                    workitem_id=row['WorkItemId'],
+                    workitem_name=row['WorkItemName'],
+                    source_uri=row['Uri'],
+                    filename=row['FileName']
+                ))
+            
+            getLogger().info(f"Found {len(files)} files for WorkItem {workitem_id} (Job {job_id})")
+            return files
+            
+        except KustoServiceError as e:
+            getLogger().error(f"Kusto query failed for WorkItem {workitem_id}: {e}")
+            raise
+        except Exception as e:
+            getLogger().error(f"Unexpected error querying Kusto for WorkItem {workitem_id}: {e}")
+            raise
+
+
+class FileReuploader:
+    """Handles downloading and reuploading files."""
+    
+    def __init__(self, target_storage_uri: str, target_container: str, 
+                 target_queue: Optional[str], credential: DefaultAzureCredential):
+        self.target_storage_uri = target_storage_uri
+        self.target_container = target_container
+        self.target_queue = target_queue
+        self.credential = credential
+    
+    def _get_credential(self):
+        """Get Azure credential for target storage."""
+        return self.credential
+    
+    def _download_file(self, source_uri: str) -> bytes:
+        """Download file from source blob storage."""
+        # Parse the source URI to extract storage account, container, and blob name
+        # Expected format: https://<account>.blob.core.windows.net/<container>/<blobname>
+        # OR with SAS: https://<account>.blob.core.windows.net/<container>/<blobname>?<sas_params>
+        
+        try:
+            # Check if URI already has SAS token (query parameters)
+            if '?' in source_uri and ('sig=' in source_uri or 'sv=' in source_uri):
+                # URI has SAS token - don't use credential (will conflict)
+                getLogger().debug(f"Using SAS token from URI for download")
+                blob_client = BlobClient.from_blob_url(source_uri)
+            else:
+                # No SAS token - use Azure AD credential
+                getLogger().debug(f"Using Azure AD credential for download")
+                credential = self._get_credential()
+                blob_client = BlobClient.from_blob_url(source_uri, credential=credential)
+            
+            # Download blob content
+            downloader = blob_client.download_blob()
+            return downloader.readall()
+            
+        except Exception as e:
+            getLogger().error(f"Failed to download from {source_uri}: {e}")
+            raise
+    
+    def _upload_file(self, file_data: bytes, blob_name: str) -> bool:
+        """Upload file to target storage."""
+        try:
+            credential = self._get_credential()
+            
+            # Upload to blob
+            blob_client = BlobClient(
+                account_url=self.target_storage_uri.format('blob'),
+                container_name=self.target_container,
+                blob_name=blob_name,
+                credential=credential
+            )
+            
+            def _upload():
+                from azure.storage.blob import ContentSettings
+                blob_client.upload_blob(
+                    file_data,
+                    blob_type="BlockBlob",
+                    content_settings=ContentSettings(content_type="application/json"),
+                    overwrite=False
+                )
+            
+            retry_on_exception(_upload, raise_exceptions=[ResourceExistsError])
+            getLogger().info(f"Uploaded blob: {blob_name}")
+            
+            # Queue message if queue is specified
+            if self.target_queue:
+                try:
+                    queue_client = QueueClient(
+                        account_url=self.target_storage_uri.format('queue'),
+                        queue_name=self.target_queue,
+                        credential=credential,
+                        message_encode_policy=TextBase64EncodePolicy()
+                    )
+                    message = QueueMessage(self.target_container, blob_name)
+                    retry_on_exception(lambda: queue_client.send_message(json.dumps(message.__dict__)))
+                    getLogger().info(f"Queued message for: {blob_name}")
+                except Exception as e:
+                    getLogger().error(f"Failed to queue message for {blob_name}: {e}")
+                    # Don't fail the upload if queuing fails
+            
+            return True
+            
+        except ResourceExistsError:
+            getLogger().info(f"Blob already exists, skipping: {blob_name}")
+            return True
+        except Exception as e:
+            getLogger().error(f"Failed to upload {blob_name}: {e}")
+            return False
+    
+    def reupload_file(self, file_meta: FileMetadata) -> Tuple[bool, Optional[str]]:
+        """Download from source and upload to target. Returns (success, error_message)."""
+        try:
+            # Generate target blob name matching get_unique_name() from upload.py
+            # Format: {WorkItemName}-{basename(filename)}
+            # WorkItemName from Kusto = HELIX_WORKITEM_ID in production runs
+            blob_name = f"{file_meta.workitem_name}-{os.path.basename(file_meta.filename)}"
+            
+            # Length check (matching upload.py logic)
+            if len(blob_name) > 1024:
+                from random import randint
+                blob_name = f"{file_meta.workitem_name}-{randint(1000, 9999)}-perf-lab-report.json"
+                getLogger().warning(f"Blob name too long, using random fallback: {blob_name}")
+            
+            # Download from source
+            getLogger().info(f"Downloading {file_meta.filename} from source...")
+            file_data = self._download_file(file_meta.source_uri)
+            
+            # Upload to target
+            getLogger().info(f"Uploading {file_meta.filename} to target...")
+            success = self._upload_file(file_data, blob_name)
+            
+            if success:
+                return (True, None)
+            else:
+                return (False, "Upload failed")
+                
+        except Exception as e:
+            error_msg = f"{type(e).__name__}: {str(e)}"
+            getLogger().error(f"Failed to reupload {file_meta.filename}: {error_msg}")
+            return (False, error_msg)
+
+
+def process_workitem(workitem_id: str, job_id: str, 
+                     kusto_helper: KustoQueryHelper,
+                     reuploader: FileReuploader,
+                     state_tracker: StateTracker,
+                     max_file_workers: int) -> bool:
+    """Process a single WorkItem: query files, download, and upload."""
+    
+    try:
+        getLogger().info(f"Processing WorkItem {workitem_id} (Job {job_id})")
+        
+        # Check if already completed
+        status = state_tracker.get_workitem_status(workitem_id, job_id)
+        if status == 'completed':
+            getLogger().info(f"WorkItem {workitem_id} already completed, skipping")
+            return True
+        
+        # Update status to in_progress
+        state_tracker.update_workitem_status(workitem_id, job_id, 'in_progress')
+        
+        # Query Kusto for files
+        try:
+            files = kusto_helper.query_files_for_workitem(workitem_id, job_id)
+        except Exception as e:
+            error_msg = f"Kusto query failed: {e}"
+            state_tracker.update_workitem_status(workitem_id, job_id, 'failed', error_msg)
+            return False
+        
+        if not files:
+            getLogger().warning(f"No files found for WorkItem {workitem_id}")
+            state_tracker.update_workitem_status(workitem_id, job_id, 'completed')
+            return True
+        
+        # Update file count
+        state_tracker.update_workitem_file_count(workitem_id, job_id, len(files))
+        
+        # Add files to tracking
+        for file_meta in files:
+            state_tracker.add_file(workitem_id, job_id, file_meta.filename, file_meta.source_uri)
+        
+        # Process files in parallel
+        failed_files = []
+        with ThreadPoolExecutor(max_workers=max_file_workers) as executor:
+            future_to_file = {
+                executor.submit(reuploader.reupload_file, file_meta): file_meta
+                for file_meta in files
+            }
+            
+            for future in as_completed(future_to_file):
+                file_meta = future_to_file[future]
+                try:
+                    success, error_msg = future.result()
+                    if success:
+                        state_tracker.update_file_status(
+                            workitem_id, job_id, file_meta.filename, 'completed'
+                        )
+                    else:
+                        state_tracker.update_file_status(
+                            workitem_id, job_id, file_meta.filename, 'failed', error_msg
+                        )
+                        failed_files.append(file_meta.filename)
+                except Exception as e:
+                    error_msg = f"{type(e).__name__}: {str(e)}"
+                    state_tracker.update_file_status(
+                        workitem_id, job_id, file_meta.filename, 'failed', error_msg
+                    )
+                    failed_files.append(file_meta.filename)
+        
+        # Update WorkItem status
+        if failed_files:
+            error_msg = f"{len(failed_files)} files failed: {', '.join(failed_files[:5])}"
+            if len(failed_files) > 5:
+                error_msg += f" and {len(failed_files) - 5} more"
+            state_tracker.update_workitem_status(workitem_id, job_id, 'failed', error_msg)
+            return False
+        else:
+            state_tracker.update_workitem_status(workitem_id, job_id, 'completed')
+            getLogger().info(f"Successfully processed WorkItem {workitem_id}")
+            return True
+            
+    except Exception as e:
+        error_msg = f"Unexpected error: {type(e).__name__}: {str(e)}"
+        getLogger().error(f"Failed to process WorkItem {workitem_id}: {error_msg}")
+        state_tracker.update_workitem_status(workitem_id, job_id, 'failed', error_msg)
+        return False
+
+
+def load_workitems_from_csv(csv_path: str, state_tracker: StateTracker) -> List[Tuple[str, str, str]]:
+    """Load WorkItem IDs, Names, and Job IDs from CSV and add to state tracker."""
+    workitems = []
+    
+    with open(csv_path, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            workitem_id = row.get('WorkItemId') or row.get('workitem_id')
+            workitem_name = row.get('WorkItemName') or row.get('workitem_name')
+            job_id = row.get('JobId') or row.get('job_id')
+            
+            if not workitem_id or not job_id:
+                getLogger().warning(f"Skipping row with missing data: {row}")
+                continue
+            
+            # If WorkItemName not in CSV, use WorkItemId as fallback
+            if not workitem_name:
+                getLogger().warning(f"No WorkItemName for {workitem_id}, using WorkItemId as name")
+                workitem_name = workitem_id
+            
+            workitems.append((workitem_id, workitem_name, job_id))
+            state_tracker.add_workitem(workitem_id, workitem_name, job_id)
+    
+    getLogger().info(f"Loaded {len(workitems)} workitems from CSV")
+    return workitems
+
+
+def print_summary(state_tracker: StateTracker):
+    """Print summary of processing status."""
+    summary = state_tracker.get_summary()
+    
+    print("\n" + "="*60)
+    print("REUPLOAD SUMMARY")
+    print("="*60)
+    print(f"Total WorkItems:       {summary.get('total', 0)}")
+    print(f"  Completed:           {summary.get('completed', 0)}")
+    print(f"  Failed:              {summary.get('failed', 0)}")
+    print(f"  In Progress:         {summary.get('in_progress', 0)}")
+    print(f"  Pending:             {summary.get('pending', 0)}")
+    print(f"\nTotal Files:           {summary.get('total_files', 0)}")
+    print(f"  Processed:           {summary.get('processed_files', 0)}")
+    print("="*60 + "\n")
+
+
+def main():
+    # Set up graceful shutdown on Ctrl+C
+    shutdown_requested = False
+    
+    def signal_handler(signum, frame):
+        nonlocal shutdown_requested
+        if not shutdown_requested:
+            shutdown_requested = True
+            getLogger().warning("\n⚠️  Shutdown requested. Finishing current WorkItems and saving state...")
+            getLogger().warning("Press Ctrl+C again to force quit (may lose progress)")
+        else:
+            getLogger().error("\n❌ Force quit! State may be incomplete.")
+            sys.exit(1)
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    
+    parser = argparse.ArgumentParser(
+        description='Reupload failed workitem files from source to target Azure Blob Storage'
+    )
+    parser.add_argument(
+        '--csv',
+        required=True,
+        help='Path to CSV file containing WorkItemId and JobId columns'
+    )
+    parser.add_argument(
+        '--state-db',
+        default='reupload_state.db',
+        help='Path to SQLite state database (default: reupload_state.db)'
+    )
+    parser.add_argument(
+        '--workitem-workers',
+        type=int,
+        default=MAX_WORKITEM_WORKERS,
+        help=f'Number of parallel WorkItem workers (default: {MAX_WORKITEM_WORKERS})'
+    )
+    parser.add_argument(
+        '--file-workers',
+        type=int,
+        default=MAX_FILE_WORKERS,
+        help=f'Number of parallel file workers per WorkItem (default: {MAX_FILE_WORKERS})'
+    )
+    parser.add_argument(
+        '--resume',
+        action='store_true',
+        help='Resume from previous run (skip completed WorkItems)'
+    )
+    parser.add_argument(
+        '--no-queue',
+        action='store_true',
+        help='Skip queuing messages after upload'
+    )
+    
+    args = parser.parse_args()
+    
+    # Setup logging
+    basicConfig(
+        level=INFO,
+        format='%(asctime)s [%(levelname)s] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    getLogger().info("Starting reupload script")
+    getLogger().info(f"CSV input: {args.csv}")
+    getLogger().info(f"State DB: {args.state_db}")
+    getLogger().info(f"WorkItem workers: {args.workitem_workers}")
+    getLogger().info(f"File workers per WorkItem: {args.file_workers}")
+    
+    # Initialize shared credential (created once, reused for all operations)
+    getLogger().info("Initializing Azure credentials...")
+    # Exclude IMDS (managed identity) and only use interactive/CLI auth
+    credential = DefaultAzureCredential(
+        exclude_managed_identity_credential=True,
+        exclude_shared_token_cache_credential=False,
+        exclude_visual_studio_code_credential=False,
+        exclude_azure_cli_credential=False,
+        exclude_environment_credential=False
+    )
+    
+    # Initialize components with shared credential
+    state_tracker = StateTracker(args.state_db)
+    kusto_helper = KustoQueryHelper(KUSTO_CLUSTER, KUSTO_DATABASE, credential)
+    reuploader = FileReuploader(
+        TARGET_STORAGE_URI,
+        TARGET_CONTAINER,
+        None if args.no_queue else TARGET_QUEUE,
+        credential
+    )
+    
+    try:
+        # Load workitems from CSV (only on first run)
+        if not args.resume:
+            getLogger().info("Loading workitems from CSV...")
+            load_workitems_from_csv(args.csv, state_tracker)
+        else:
+            getLogger().info("Resuming from previous run...")
+        
+        # Get pending workitems
+        pending_workitems = state_tracker.get_pending_workitems()
+        getLogger().info(f"Processing {len(pending_workitems)} workitems")
+        
+        if not pending_workitems:
+            getLogger().info("No pending workitems to process")
+            print_summary(state_tracker)
+            return 0
+        
+        # Process workitems in parallel
+        completed = 0
+        failed = 0
+        
+        with ThreadPoolExecutor(max_workers=args.workitem_workers) as executor:
+            future_to_workitem = {
+                executor.submit(
+                    process_workitem,
+                    workitem_id,
+                    job_id,
+                    kusto_helper,
+                    reuploader,
+                    state_tracker,
+                    args.file_workers
+                ): (workitem_id, job_id)
+                for workitem_id, job_id in pending_workitems
+            }
+            
+            for future in as_completed(future_to_workitem):
+                # Check for shutdown request
+                if shutdown_requested:
+                    getLogger().warning("Shutdown in progress - canceling remaining WorkItems...")
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    break
+                
+                workitem_id, job_id = future_to_workitem[future]
+                try:
+                    success = future.result()
+                    if success:
+                        completed += 1
+                    else:
+                        failed += 1
+                    
+                    # Progress update every 10 workitems
+                    if (completed + failed) % 10 == 0:
+                        getLogger().info(
+                            f"Progress: {completed + failed}/{len(pending_workitems)} "
+                            f"(Completed: {completed}, Failed: {failed})"
+                        )
+                        
+                except Exception as e:
+                    failed += 1
+                    getLogger().error(f"Unexpected error processing WorkItem {workitem_id}: {e}")
+        
+        # Print final summary
+        print_summary(state_tracker)
+        
+        if failed > 0:
+            getLogger().warning(f"{failed} workitems failed - check state DB for details")
+            return 1
+        else:
+            getLogger().info("All workitems processed successfully!")
+            return 0
+            
+    finally:
+        state_tracker.close()
+
+
+if __name__ == '__main__':
+    sys.exit(main())
