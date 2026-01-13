@@ -36,16 +36,19 @@ def get_stats(db_path: str) -> Dict:
     stats['in_progress'] = status_counts.get('in_progress', 0)
     stats['pending'] = status_counts.get('pending', 0)
     
-    # File stats
+    # File stats - count from files table for accuracy
     cursor.execute("""
-        SELECT SUM(files_total), SUM(files_processed) FROM workitems
+        SELECT COUNT(*) FROM files
     """)
-    file_counts = cursor.fetchone()
-    stats['total_files'] = file_counts[0] or 0
-    stats['processed_files'] = file_counts[1] or 0
+    stats['total_files'] = cursor.fetchone()[0]
+    
+    cursor.execute("""
+        SELECT COUNT(*) FROM files WHERE status = 'completed'
+    """)
+    stats['processed_files'] = cursor.fetchone()[0]
     
     # Recent completions (last 5 minutes)
-    five_min_ago = (datetime.utcnow() - timedelta(minutes=5)).isoformat()
+    five_min_ago = (datetime.now(__import__('datetime').timezone.utc) - timedelta(minutes=5)).isoformat()
     cursor.execute("""
         SELECT COUNT(*) FROM workitems 
         WHERE status = 'completed' AND completed_at > ?
@@ -98,7 +101,7 @@ def calculate_eta(stats: Dict) -> Optional[str]:
     
     try:
         start_time = datetime.fromisoformat(stats['earliest_start'])
-        elapsed = datetime.utcnow() - start_time
+        elapsed = datetime.now(__import__('datetime').timezone.utc) - start_time
         
         if elapsed.total_seconds() < 60:  # Less than 1 minute
             return None
@@ -114,7 +117,7 @@ def calculate_eta(stats: Dict) -> Optional[str]:
             return None
         
         eta_seconds = remaining / rate
-        eta = datetime.utcnow() + timedelta(seconds=eta_seconds)
+        eta = datetime.now(__import__('datetime').timezone.utc) + timedelta(seconds=eta_seconds)
         
         return eta.strftime('%Y-%m-%d %H:%M:%S')
     except:
@@ -207,7 +210,7 @@ def print_dashboard(stats: Dict, refresh_interval: int):
     if stats['earliest_start']:
         try:
             start_time = datetime.fromisoformat(stats['earliest_start'])
-            elapsed = datetime.utcnow() - start_time
+            elapsed = datetime.now(__import__('datetime').timezone.utc) - start_time
             elapsed_seconds = elapsed.total_seconds()
             
             if elapsed_seconds > 0:

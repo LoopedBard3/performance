@@ -16,9 +16,10 @@ import sqlite3
 import argparse
 import os
 import signal
+import time
 from datetime import datetime
 from typing import Optional, List, Dict, Tuple
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, CancelledError
 from logging import getLogger, INFO, basicConfig
 from dataclasses import dataclass
 
@@ -79,16 +80,27 @@ class WorkItemStatus:
 
 
 class StateTracker:
-    """SQLite-based state tracker for resume capability."""
+    """SQLite-based state tracker for resume capability with thread-safe access."""
     
     def __init__(self, db_path: str):
         self.db_path = db_path
-        self.conn = sqlite3.connect(db_path, check_same_thread=False)
+        # Don't store connection - create per thread instead
+        self._lock = __import__('threading').Lock()
+        self._thread_local = __import__('threading').local()
+        
+        # Initialize database schema with a temporary connection
         self._init_db()
+    
+    def _get_connection(self):
+        """Get or create a connection for the current thread."""
+        if not hasattr(self._thread_local, 'conn') or self._thread_local.conn is None:
+            self._thread_local.conn = sqlite3.connect(self.db_path, timeout=30.0)
+        return self._thread_local.conn
     
     def _init_db(self):
         """Initialize database schema."""
-        cursor = self.conn.cursor()
+        conn = sqlite3.connect(self.db_path, timeout=30.0)
+        cursor = conn.cursor()
         
         # WorkItems table
         cursor.execute("""
@@ -120,129 +132,152 @@ class StateTracker:
             )
         """)
         
-        self.conn.commit()
+        conn.commit()
+        conn.close()
     
     def add_workitem(self, workitem_id: str, workitem_name: str, job_id: str):
         """Add a new workitem to track."""
-        cursor = self.conn.cursor()
-        cursor.execute("""
-            INSERT OR IGNORE INTO workitems (workitem_id, workitem_name, job_id, status)
-            VALUES (?, ?, ?, 'pending')
-        """, (workitem_id, workitem_name, job_id))
-        self.conn.commit()
+        with self._lock:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT OR IGNORE INTO workitems (workitem_id, workitem_name, job_id, status)
+                VALUES (?, ?, ?, 'pending')
+            """, (workitem_id, workitem_name, job_id))
+            conn.commit()
     
     def update_workitem_status(self, workitem_id: str, job_id: str, status: str, 
                                error_message: Optional[str] = None):
         """Update workitem status."""
-        cursor = self.conn.cursor()
-        timestamp = datetime.utcnow().isoformat()
-        
-        if status == 'in_progress':
-            cursor.execute("""
-                UPDATE workitems 
-                SET status = ?, started_at = ?
-                WHERE workitem_id = ? AND job_id = ?
-            """, (status, timestamp, workitem_id, job_id))
-        elif status in ('completed', 'failed'):
-            cursor.execute("""
-                UPDATE workitems 
-                SET status = ?, completed_at = ?, error_message = ?
-                WHERE workitem_id = ? AND job_id = ?
-            """, (status, timestamp, error_message, workitem_id, job_id))
-        else:
-            cursor.execute("""
-                UPDATE workitems 
-                SET status = ?, error_message = ?
-                WHERE workitem_id = ? AND job_id = ?
-            """, (status, error_message, workitem_id, job_id))
-        
-        self.conn.commit()
+        with self._lock:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            timestamp = datetime.now(__import__('datetime').timezone.utc).isoformat()
+            
+            if status == 'in_progress':
+                cursor.execute("""
+                    UPDATE workitems 
+                    SET status = ?, started_at = ?
+                    WHERE workitem_id = ? AND job_id = ?
+                """, (status, timestamp, workitem_id, job_id))
+            elif status in ('completed', 'failed'):
+                cursor.execute("""
+                    UPDATE workitems 
+                    SET status = ?, completed_at = ?, error_message = ?
+                    WHERE workitem_id = ? AND job_id = ?
+                """, (status, timestamp, error_message, workitem_id, job_id))
+            else:
+                cursor.execute("""
+                    UPDATE workitems 
+                    SET status = ?, error_message = ?
+                    WHERE workitem_id = ? AND job_id = ?
+                """, (status, error_message, workitem_id, job_id))
+            
+            conn.commit()
     
     def update_workitem_file_count(self, workitem_id: str, job_id: str, files_total: int):
         """Update the total file count for a workitem."""
-        cursor = self.conn.cursor()
-        cursor.execute("""
-            UPDATE workitems 
-            SET files_total = ?
-            WHERE workitem_id = ? AND job_id = ?
-        """, (files_total, workitem_id, job_id))
-        self.conn.commit()
+        with self._lock:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE workitems 
+                SET files_total = ?
+                WHERE workitem_id = ? AND job_id = ?
+            """, (files_total, workitem_id, job_id))
+            conn.commit()
     
     def add_file(self, workitem_id: str, job_id: str, filename: str, source_uri: str):
         """Add a file to track."""
-        cursor = self.conn.cursor()
-        cursor.execute("""
-            INSERT OR IGNORE INTO files (workitem_id, job_id, filename, source_uri, status)
-            VALUES (?, ?, ?, ?, 'pending')
-        """, (workitem_id, job_id, filename, source_uri))
-        self.conn.commit()
+        with self._lock:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT OR IGNORE INTO files (workitem_id, job_id, filename, source_uri, status)
+                VALUES (?, ?, ?, ?, 'pending')
+            """, (workitem_id, job_id, filename, source_uri))
+            conn.commit()
     
     def update_file_status(self, workitem_id: str, job_id: str, filename: str, 
                           status: str, error_message: Optional[str] = None):
         """Update file upload status."""
-        cursor = self.conn.cursor()
-        timestamp = datetime.utcnow().isoformat()
-        
-        cursor.execute("""
-            UPDATE files 
-            SET status = ?, error_message = ?, uploaded_at = ?
-            WHERE workitem_id = ? AND job_id = ? AND filename = ?
-        """, (status, error_message, timestamp, workitem_id, job_id, filename))
-        
-        self.conn.commit()
-        
-        # Update workitem progress
-        if status == 'completed':
+        with self._lock:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            timestamp = datetime.now(__import__('datetime').timezone.utc).isoformat()
+            
             cursor.execute("""
-                UPDATE workitems 
-                SET files_processed = files_processed + 1
-                WHERE workitem_id = ? AND job_id = ?
-            """, (workitem_id, job_id))
-            self.conn.commit()
+                UPDATE files 
+                SET status = ?, error_message = ?, uploaded_at = ?
+                WHERE workitem_id = ? AND job_id = ? AND filename = ?
+            """, (status, error_message, timestamp, workitem_id, job_id, filename))
+            
+            conn.commit()
+            
+            # Update workitem progress
+            if status == 'completed':
+                cursor.execute("""
+                    UPDATE workitems 
+                    SET files_processed = files_processed + 1
+                    WHERE workitem_id = ? AND job_id = ?
+                """, (workitem_id, job_id))
+                conn.commit()
     
     def get_workitem_status(self, workitem_id: str, job_id: str) -> Optional[str]:
         """Get current status of a workitem."""
-        cursor = self.conn.cursor()
-        cursor.execute("""
-            SELECT status FROM workitems 
-            WHERE workitem_id = ? AND job_id = ?
-        """, (workitem_id, job_id))
-        result = cursor.fetchone()
-        return result[0] if result else None
+        with self._lock:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT status FROM workitems 
+                WHERE workitem_id = ? AND job_id = ?
+            """, (workitem_id, job_id))
+            result = cursor.fetchone()
+            return result[0] if result else None
     
     def get_pending_workitems(self) -> List[Tuple[str, str]]:
         """Get all workitems that are pending or failed."""
-        cursor = self.conn.cursor()
-        cursor.execute("""
-            SELECT workitem_id, job_id FROM workitems 
-            WHERE status IN ('pending', 'failed', 'in_progress')
-            ORDER BY workitem_id
-        """)
-        return cursor.fetchall()
+        with self._lock:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT workitem_id, job_id FROM workitems 
+                WHERE status IN ('pending', 'failed', 'in_progress')
+                ORDER BY workitem_id
+            """)
+            return cursor.fetchall()
     
     def get_summary(self) -> Dict[str, int]:
         """Get summary statistics."""
-        cursor = self.conn.cursor()
-        cursor.execute("""
-            SELECT status, COUNT(*) FROM workitems GROUP BY status
-        """)
-        summary = dict(cursor.fetchall())
-        
-        cursor.execute("SELECT COUNT(*) FROM workitems")
-        summary['total'] = cursor.fetchone()[0]
-        
-        cursor.execute("""
-            SELECT SUM(files_total), SUM(files_processed) FROM workitems
-        """)
-        file_counts = cursor.fetchone()
-        summary['total_files'] = file_counts[0] or 0
-        summary['processed_files'] = file_counts[1] or 0
-        
-        return summary
+        with self._lock:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT status, COUNT(*) FROM workitems GROUP BY status
+            """)
+            summary = dict(cursor.fetchall())
+            
+            cursor.execute("SELECT COUNT(*) FROM workitems")
+            summary['total'] = cursor.fetchone()[0]
+            
+            # Count files from the files table for accuracy
+            cursor.execute("""
+                SELECT COUNT(*) FROM files
+            """)
+            summary['total_files'] = cursor.fetchone()[0]
+            
+            cursor.execute("""
+                SELECT COUNT(*) FROM files WHERE status = 'completed'
+            """)
+            summary['processed_files'] = cursor.fetchone()[0]
+            
+            return summary
     
     def close(self):
-        """Close database connection."""
-        self.conn.close()
+        """Close database connection for current thread."""
+        if hasattr(self._thread_local, 'conn') and self._thread_local.conn:
+            self._thread_local.conn.close()
+            self._thread_local.conn = None
 
 
 class KustoQueryHelper:
@@ -253,9 +288,30 @@ class KustoQueryHelper:
         self.database = database
         self.credential = credential
         self.client = None
+        
+        # Pre-cache Kusto token
+        self._kusto_token = None
+        self._kusto_token_expiry = 0
+        self._warm_up_credential()
+    
+    def _warm_up_credential(self):
+        """Pre-fetch and cache Kusto token to avoid repeated Azure CLI calls."""
+        try:
+            getLogger().info("Pre-fetching Kusto token to cache...")
+            token = self.credential.get_token("https://kusto.kusto.windows.net/.default")
+            self._kusto_token = token
+            self._kusto_token_expiry = token.expires_on
+            getLogger().info(f"Cached Kusto token (expires in ~{(token.expires_on - time.time())/3600:.1f} hours)")
+        except Exception as e:
+            getLogger().warning(f"Failed to pre-cache Kusto token: {e}")
     
     def _get_client(self) -> KustoClient:
         """Get or create Kusto client with Azure AD authentication."""
+        # Check if token needs refresh (within 5 minutes of expiry)
+        if self._kusto_token and (self._kusto_token_expiry - time.time()) < 300:
+            getLogger().debug("Kusto token expiring soon, refreshing...")
+            self._warm_up_credential()
+        
         if self.client is None:
             kcsb = KustoConnectionStringBuilder.with_azure_token_credential(
                 self.cluster,
@@ -308,9 +364,35 @@ class FileReuploader:
         self.target_container = target_container
         self.target_queue = target_queue
         self.credential = credential
+        
+        # Pre-cache tokens at initialization to avoid repeated subprocess calls
+        self._storage_token = None
+        self._storage_token_expiry = 0
+        self._warm_up_credential()
+    
+    def _warm_up_credential(self):
+        """Pre-fetch and cache tokens to avoid repeated Azure CLI calls."""
+        try:
+            getLogger().info("Pre-fetching Azure tokens to cache...")
+            # Get storage token (valid for ~1 hour)
+            token = self.credential.get_token("https://storage.azure.com/.default")
+            self._storage_token = token
+            self._storage_token_expiry = token.expires_on
+            getLogger().info(f"Cached storage token (expires in ~{(token.expires_on - time.time())/3600:.1f} hours)")
+        except Exception as e:
+            getLogger().warning(f"Failed to pre-cache token: {e}")
     
     def _get_credential(self):
         """Get Azure credential for target storage."""
+        # Check if token is expiring soon (within 5 minutes)
+        import time
+        if self._storage_token and (self._storage_token_expiry - time.time()) > 300:
+            # Token is still valid, reuse it
+            return self.credential
+        else:
+            # Token expired or expiring soon, refresh it
+            getLogger().debug("Refreshing storage token...")
+            self._warm_up_credential()
         return self.credential
     
     def _download_file(self, source_uri: str) -> bytes:
@@ -408,7 +490,7 @@ class FileReuploader:
             file_data = self._download_file(file_meta.source_uri)
             
             # Upload to target
-            getLogger().info(f"Uploading {file_meta.filename} to target...")
+            getLogger().info(f"Uploading {file_meta.filename} to target {blob_name}...")
             success = self._upload_file(file_data, blob_name)
             
             if success:
@@ -426,10 +508,15 @@ def process_workitem(workitem_id: str, job_id: str,
                      kusto_helper: KustoQueryHelper,
                      reuploader: FileReuploader,
                      state_tracker: StateTracker,
-                     max_file_workers: int) -> bool:
+                     max_file_workers: int,
+                     shutdown_event: __import__('threading').Event) -> bool:
     """Process a single WorkItem: query files, download, and upload."""
     
     try:
+        # Check for shutdown at the start
+        if shutdown_event.is_set():
+            getLogger().info(f"Skipping WorkItem {workitem_id} due to shutdown")
+            return False
         getLogger().info(f"Processing WorkItem {workitem_id} (Job {job_id})")
         
         # Check if already completed
@@ -454,6 +541,12 @@ def process_workitem(workitem_id: str, job_id: str,
             state_tracker.update_workitem_status(workitem_id, job_id, 'completed')
             return True
         
+        # Check for shutdown before starting file uploads
+        if shutdown_event.is_set():
+            getLogger().info(f"Aborting WorkItem {workitem_id} - shutdown requested")
+            state_tracker.update_workitem_status(workitem_id, job_id, 'pending')
+            return False
+        
         # Update file count
         state_tracker.update_workitem_file_count(workitem_id, job_id, len(files))
         
@@ -470,6 +563,14 @@ def process_workitem(workitem_id: str, job_id: str,
             }
             
             for future in as_completed(future_to_file):
+                # Check for shutdown during file processing
+                if shutdown_event.is_set():
+                    getLogger().info(f"Canceling remaining files for WorkItem {workitem_id}")
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    state_tracker.update_workitem_status(workitem_id, job_id, 'pending', 
+                                                        'Shutdown requested mid-processing')
+                    return False
+                
                 file_meta = future_to_file[future]
                 try:
                     success, error_msg = future.result()
@@ -554,12 +655,11 @@ def print_summary(state_tracker: StateTracker):
 
 def main():
     # Set up graceful shutdown on Ctrl+C
-    shutdown_requested = False
+    shutdown_event = __import__('threading').Event()
     
     def signal_handler(signum, frame):
-        nonlocal shutdown_requested
-        if not shutdown_requested:
-            shutdown_requested = True
+        if not shutdown_event.is_set():
+            shutdown_event.set()
             getLogger().warning("\n⚠️  Shutdown requested. Finishing current WorkItems and saving state...")
             getLogger().warning("Press Ctrl+C again to force quit (may lose progress)")
         else:
@@ -613,6 +713,31 @@ def main():
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     
+    # Suppress ALL Azure SDK logging except critical errors
+    import logging
+    import os
+    
+    # Set environment variable to disable Azure SDK logging globally
+    os.environ['AZURE_LOG_LEVEL'] = 'ERROR'
+    
+    # Reduce verbosity of Azure SDK loggers to avoid spam
+    logging.getLogger('azure').setLevel(logging.ERROR)
+    logging.getLogger('azure.identity').setLevel(logging.ERROR)
+    logging.getLogger('azure.core').setLevel(logging.ERROR)
+    logging.getLogger('azure.identity._credentials').setLevel(logging.ERROR)
+    logging.getLogger('azure.identity._credentials.chained').setLevel(logging.ERROR)
+    logging.getLogger('azure.identity._credentials.azure_cli').setLevel(logging.ERROR)
+    logging.getLogger('azure.identity._internal').setLevel(logging.ERROR)
+    logging.getLogger('azure.identity._internal.get_token_mixin').setLevel(logging.ERROR)
+    logging.getLogger('azure.core.pipeline.policies.http_logging_policy').setLevel(logging.ERROR)
+    logging.getLogger('azure.storage').setLevel(logging.ERROR)
+    logging.getLogger('azure.storage.blob').setLevel(logging.ERROR)
+    logging.getLogger('azure.storage.queue').setLevel(logging.ERROR)
+    
+    # Completely disable urllib3 and requests logging (used by Azure SDK)
+    logging.getLogger('urllib3').setLevel(logging.ERROR)
+    logging.getLogger('requests').setLevel(logging.ERROR)
+    
     getLogger().info("Starting reupload script")
     getLogger().info(f"CSV input: {args.csv}")
     getLogger().info(f"State DB: {args.state_db}")
@@ -621,14 +746,35 @@ def main():
     
     # Initialize shared credential (created once, reused for all operations)
     getLogger().info("Initializing Azure credentials...")
-    # Exclude IMDS (managed identity) and only use interactive/CLI auth
-    credential = DefaultAzureCredential(
-        exclude_managed_identity_credential=True,
-        exclude_shared_token_cache_credential=False,
-        exclude_visual_studio_code_credential=False,
-        exclude_azure_cli_credential=False,
-        exclude_environment_credential=False
-    )
+    
+    # Use InteractiveBrowserCredential instead of DefaultAzureCredential
+    # This is more stable and doesn't rely on Azure CLI subprocess calls
+    try:
+        from azure.identity import InteractiveBrowserCredential
+        
+        credential = InteractiveBrowserCredential(
+            timeout=30,
+            additionally_allowed_tenants=["*"]
+        )
+        
+        # Test the credential by getting a token
+        getLogger().info("Testing credential by acquiring token (browser window will open)...")
+        test_token = credential.get_token("https://kusto.kusto.windows.net/.default")
+        getLogger().info("✓ Credential successfully acquired token")
+    except Exception as e:
+        getLogger().error(f"Failed to initialize credentials: {e}")
+        getLogger().error("Browser authentication failed. Falling back to Azure CLI...")
+        
+        # Fallback to CLI credential if browser fails
+        from azure.identity import AzureCliCredential
+        try:
+            credential = AzureCliCredential(process_timeout=30)
+            test_token = credential.get_token("https://kusto.kusto.windows.net/.default")
+            getLogger().info("✓ Azure CLI credential working")
+        except Exception as cli_error:
+            getLogger().error(f"Azure CLI credential also failed: {cli_error}")
+            getLogger().error("Please run 'az login' or ensure browser authentication is available")
+            return 1
     
     # Initialize components with shared credential
     state_tracker = StateTracker(args.state_db)
@@ -660,8 +806,10 @@ def main():
         # Process workitems in parallel
         completed = 0
         failed = 0
+        skipped = 0
         
-        with ThreadPoolExecutor(max_workers=args.workitem_workers) as executor:
+        executor = ThreadPoolExecutor(max_workers=args.workitem_workers)
+        try:
             future_to_workitem = {
                 executor.submit(
                     process_workitem,
@@ -670,36 +818,51 @@ def main():
                     kusto_helper,
                     reuploader,
                     state_tracker,
-                    args.file_workers
+                    args.file_workers,
+                    shutdown_event  # Pass shutdown event
                 ): (workitem_id, job_id)
                 for workitem_id, job_id in pending_workitems
             }
             
             for future in as_completed(future_to_workitem):
                 # Check for shutdown request
-                if shutdown_requested:
+                if shutdown_event.is_set():
                     getLogger().warning("Shutdown in progress - canceling remaining WorkItems...")
-                    executor.shutdown(wait=False, cancel_futures=True)
+                    # Cancel all pending futures
+                    for f in future_to_workitem:
+                        if not f.done():
+                            f.cancel()
                     break
                 
                 workitem_id, job_id = future_to_workitem[future]
                 try:
-                    success = future.result()
+                    success = future.result(timeout=2)  # Quick timeout
                     if success:
                         completed += 1
-                    else:
+                    elif success is False:
                         failed += 1
+                    else:
+                        skipped += 1
                     
                     # Progress update every 10 workitems
-                    if (completed + failed) % 10 == 0:
+                    if (completed + failed + skipped) % 10 == 0:
                         getLogger().info(
-                            f"Progress: {completed + failed}/{len(pending_workitems)} "
-                            f"(Completed: {completed}, Failed: {failed})"
+                            f"Progress: {completed + failed + skipped}/{len(pending_workitems)} "
+                            f"(Completed: {completed}, Failed: {failed}, Skipped: {skipped})"
                         )
                         
+                except CancelledError:
+                    skipped += 1
+                    getLogger().debug(f"WorkItem {workitem_id} was cancelled")
                 except Exception as e:
                     failed += 1
                     getLogger().error(f"Unexpected error processing WorkItem {workitem_id}: {e}")
+        
+        finally:
+            # Shutdown executor - wait for in-progress tasks
+            getLogger().info("Shutting down thread pool...")
+            executor.shutdown(wait=True, cancel_futures=True)
+            getLogger().info("✓ Thread pool shutdown complete")
         
         # Print final summary
         print_summary(state_tracker)
