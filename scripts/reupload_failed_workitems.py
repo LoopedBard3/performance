@@ -234,6 +234,33 @@ class StateTracker:
             """, (workitem_id, job_id))
             result = cursor.fetchone()
             return result[0] if result else None
+
+    def get_file_status(self, workitem_id: str, job_id: str, filename: str) -> Optional[str]:
+        """Get current status of a file."""
+        with self._lock:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT status FROM files
+                WHERE workitem_id = ? AND job_id = ? AND filename = ?
+            """, (workitem_id, job_id, filename))
+            result = cursor.fetchone()
+            return result[0] if result else None
+
+    def claim_file(self, workitem_id: str, job_id: str, filename: str) -> bool:
+        """Claim a file for processing if it's not already in progress or completed."""
+        with self._lock:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            timestamp = datetime.now(__import__('datetime').timezone.utc).isoformat()
+            cursor.execute("""
+                UPDATE files
+                SET status = 'in_progress', error_message = NULL, uploaded_at = ?
+                WHERE workitem_id = ? AND job_id = ? AND filename = ?
+                  AND status IN ('pending', 'failed')
+            """, (timestamp, workitem_id, job_id, filename))
+            conn.commit()
+            return cursor.rowcount == 1
     
     def get_pending_workitems(self) -> List[Tuple[str, str]]:
         """Get all workitems that are pending or failed."""
@@ -369,6 +396,32 @@ class FileReuploader:
         self._storage_token = None
         self._storage_token_expiry = 0
         self._warm_up_credential()
+        
+        # Create reusable service clients for connection pooling
+        from azure.storage.blob import BlobServiceClient
+        from azure.storage.queue import QueueServiceClient
+        
+        self._blob_service_client = BlobServiceClient(
+            account_url=self.target_storage_uri.format('blob'),
+            credential=credential,
+            max_single_put_size=4*1024*1024,  # 4MB max single upload
+            max_block_size=4*1024*1024,       # 4MB blocks
+            connection_timeout=300,            # 5 min timeout
+            read_timeout=300
+        )
+        
+        if self.target_queue:
+            self._queue_service_client = QueueServiceClient(
+                account_url=self.target_storage_uri.format('queue'),
+                credential=credential,
+                message_encode_policy=TextBase64EncodePolicy()
+            )
+            self._queue_client = self._queue_service_client.get_queue_client(self.target_queue)
+        else:
+            self._queue_client = None
+        
+        # Get container client for uploads (reuses connections)
+        self._container_client = self._blob_service_client.get_container_client(self.target_container)
     
     def _warm_up_credential(self):
         """Pre-fetch and cache tokens to avoid repeated Azure CLI calls."""
@@ -396,7 +449,7 @@ class FileReuploader:
         return self.credential
     
     def _download_file(self, source_uri: str) -> bytes:
-        """Download file from source blob storage."""
+        """Download file from source blob storage with optimizations."""
         # Parse the source URI to extract storage account, container, and blob name
         # Expected format: https://<account>.blob.core.windows.net/<container>/<blobname>
         # OR with SAS: https://<account>.blob.core.windows.net/<container>/<blobname>?<sas_params>
@@ -406,33 +459,44 @@ class FileReuploader:
             if '?' in source_uri and ('sig=' in source_uri or 'sv=' in source_uri):
                 # URI has SAS token - don't use credential (will conflict)
                 getLogger().debug(f"Using SAS token from URI for download")
-                blob_client = BlobClient.from_blob_url(source_uri)
+                blob_client = BlobClient.from_blob_url(
+                    source_uri,
+                    connection_timeout=60,
+                    read_timeout=120
+                )
             else:
                 # No SAS token - use Azure AD credential
                 getLogger().debug(f"Using Azure AD credential for download")
                 credential = self._get_credential()
-                blob_client = BlobClient.from_blob_url(source_uri, credential=credential)
+                blob_client = BlobClient.from_blob_url(
+                    source_uri,
+                    credential=credential,
+                    connection_timeout=60,
+                    read_timeout=120
+                )
             
-            # Download blob content
-            downloader = blob_client.download_blob()
+            # Download blob content with timeout settings
+            downloader = blob_client.download_blob(max_concurrency=4)
             return downloader.readall()
             
         except Exception as e:
             getLogger().error(f"Failed to download from {source_uri}: {e}")
             raise
     
-    def _upload_file(self, file_data: bytes, blob_name: str) -> bool:
-        """Upload file to target storage."""
+    def check_blob_exists(self, blob_name: str) -> bool:
+        """Check if a blob already exists in target storage."""
         try:
-            credential = self._get_credential()
-            
-            # Upload to blob
-            blob_client = BlobClient(
-                account_url=self.target_storage_uri.format('blob'),
-                container_name=self.target_container,
-                blob_name=blob_name,
-                credential=credential
-            )
+            blob_client = self._container_client.get_blob_client(blob_name)
+            return blob_client.exists()
+        except Exception as e:
+            getLogger().warning(f"Failed to check if blob exists {blob_name}: {e}")
+            return False
+    
+    def _upload_file(self, file_data: bytes, blob_name: str) -> bool:
+        """Upload file to target storage using pooled connections."""
+        try:
+            # Use pooled blob client from container
+            blob_client = self._container_client.get_blob_client(blob_name)
             
             def _upload():
                 from azure.storage.blob import ContentSettings
@@ -440,23 +504,18 @@ class FileReuploader:
                     file_data,
                     blob_type="BlockBlob",
                     content_settings=ContentSettings(content_type="application/json"),
-                    overwrite=False
+                    overwrite=False,
+                    max_concurrency=4  # Parallel upload for larger files
                 )
             
             retry_on_exception(_upload, raise_exceptions=[ResourceExistsError])
             getLogger().info(f"Uploaded blob: {blob_name}")
             
-            # Queue message if queue is specified
-            if self.target_queue:
+            # Queue message if queue is specified (use pooled client)
+            if self._queue_client:
                 try:
-                    queue_client = QueueClient(
-                        account_url=self.target_storage_uri.format('queue'),
-                        queue_name=self.target_queue,
-                        credential=credential,
-                        message_encode_policy=TextBase64EncodePolicy()
-                    )
                     message = QueueMessage(self.target_container, blob_name)
-                    retry_on_exception(lambda: queue_client.send_message(json.dumps(message.__dict__)))
+                    retry_on_exception(lambda: self._queue_client.send_message(json.dumps(message.__dict__)))
                     getLogger().info(f"Queued message for: {blob_name}")
                 except Exception as e:
                     getLogger().error(f"Failed to queue message for {blob_name}: {e}")
@@ -484,6 +543,11 @@ class FileReuploader:
                 from random import randint
                 blob_name = f"{file_meta.workitem_name}-{randint(1000, 9999)}-perf-lab-report.json"
                 getLogger().warning(f"Blob name too long, using random fallback: {blob_name}")
+            
+            # Skip download if blob already exists (idempotent behavior)
+            if self.check_blob_exists(blob_name):
+                getLogger().info(f"Blob already exists, skipping download: {blob_name}")
+                return (True, None)
             
             # Download from source
             getLogger().info(f"Downloading {file_meta.filename} from source...")
@@ -541,6 +605,25 @@ def process_workitem(workitem_id: str, job_id: str,
             state_tracker.update_workitem_status(workitem_id, job_id, 'completed')
             return True
         
+        # De-duplicate files by blob name (workitem name + basename)
+        unique_files = {}
+        duplicate_count = 0
+        for file_meta in files:
+            blob_key = os.path.basename(file_meta.filename)
+            if blob_key in unique_files:
+                duplicate_count += 1
+                getLogger().debug(
+                    f"Duplicate file entry for WorkItem {workitem_id}: {file_meta.filename} (source {file_meta.source_uri})"
+                )
+                continue
+            unique_files[blob_key] = file_meta
+        if duplicate_count:
+            getLogger().debug(
+                f"Detected {duplicate_count} duplicate file entries for WorkItem {workitem_id}; "
+                "processing unique filenames only"
+            )
+        files = list(unique_files.values())
+
         # Check for shutdown before starting file uploads
         if shutdown_event.is_set():
             getLogger().info(f"Aborting WorkItem {workitem_id} - shutdown requested")
@@ -550,16 +633,42 @@ def process_workitem(workitem_id: str, job_id: str,
         # Update file count
         state_tracker.update_workitem_file_count(workitem_id, job_id, len(files))
         
-        # Add files to tracking
+        # Add files to tracking and claim for processing
+        files_to_process = []
+        skipped_claimed = 0
+        skipped_completed = 0
         for file_meta in files:
             state_tracker.add_file(workitem_id, job_id, file_meta.filename, file_meta.source_uri)
+            status = state_tracker.get_file_status(workitem_id, job_id, file_meta.filename)
+            if status == 'completed':
+                skipped_completed += 1
+                continue
+            if state_tracker.claim_file(workitem_id, job_id, file_meta.filename):
+                files_to_process.append(file_meta)
+            else:
+                skipped_claimed += 1
+
+        if skipped_completed:
+            getLogger().info(
+                f"Skipping {skipped_completed} already-completed files for WorkItem {workitem_id}"
+            )
+        if skipped_claimed:
+            getLogger().info(
+                f"Skipping {skipped_claimed} files already claimed for WorkItem {workitem_id}"
+            )
+        if not files_to_process:
+            state_tracker.update_workitem_status(workitem_id, job_id, 'completed')
+            getLogger().info(f"All files already completed or claimed for WorkItem {workitem_id}")
+            return True
         
         # Process files in parallel
         failed_files = []
+
+        
         with ThreadPoolExecutor(max_workers=max_file_workers) as executor:
             future_to_file = {
                 executor.submit(reuploader.reupload_file, file_meta): file_meta
-                for file_meta in files
+                for file_meta in files_to_process
             }
             
             for future in as_completed(future_to_file):
@@ -609,9 +718,27 @@ def process_workitem(workitem_id: str, job_id: str,
         return False
 
 
-def load_workitems_from_csv(csv_path: str, state_tracker: StateTracker) -> List[Tuple[str, str, str]]:
-    """Load WorkItem IDs, Names, and Job IDs from CSV and add to state tracker."""
+def belongs_to_partition(workitem_id: str, partition: int, total_partitions: int) -> bool:
+    """Determine if a workitem belongs to this partition using consistent hashing.
+    
+    Uses hash(workitem_id) % total_partitions to deterministically assign workitems.
+    This ensures the same workitem always goes to the same partition.
+    """
+    return hash(workitem_id) % total_partitions == partition
+
+
+def load_workitems_from_csv(csv_path: str, state_tracker: StateTracker, 
+                            partition: int = None, total_partitions: int = None) -> List[Tuple[str, str, str]]:
+    """Load WorkItem IDs, Names, and Job IDs from CSV and add to state tracker.
+    
+    Args:
+        csv_path: Path to CSV file
+        state_tracker: State tracker to add workitems to
+        partition: Partition number for this instance (0-based), None for no partitioning
+        total_partitions: Total number of partitions, None for no partitioning
+    """
     workitems = []
+    skipped_partition = 0
     
     with open(csv_path, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
@@ -624,6 +751,12 @@ def load_workitems_from_csv(csv_path: str, state_tracker: StateTracker) -> List[
                 getLogger().warning(f"Skipping row with missing data: {row}")
                 continue
             
+            # Check partition assignment
+            if partition is not None and total_partitions is not None:
+                if not belongs_to_partition(workitem_id, partition, total_partitions):
+                    skipped_partition += 1
+                    continue
+            
             # If WorkItemName not in CSV, use WorkItemId as fallback
             if not workitem_name:
                 getLogger().warning(f"No WorkItemName for {workitem_id}, using WorkItemId as name")
@@ -632,7 +765,10 @@ def load_workitems_from_csv(csv_path: str, state_tracker: StateTracker) -> List[
             workitems.append((workitem_id, workitem_name, job_id))
             state_tracker.add_workitem(workitem_id, workitem_name, job_id)
     
-    getLogger().info(f"Loaded {len(workitems)} workitems from CSV")
+    if partition is not None:
+        getLogger().info(f"Loaded {len(workitems)} workitems from CSV for partition {partition + 1}/{total_partitions} (skipped {skipped_partition} from other partitions)")
+    else:
+        getLogger().info(f"Loaded {len(workitems)} workitems from CSV")
     return workitems
 
 
@@ -703,8 +839,33 @@ def main():
         action='store_true',
         help='Skip queuing messages after upload'
     )
+    parser.add_argument(
+        '--partition',
+        type=int,
+        help='Partition number (0-based) for this instance (e.g., 0 for first machine)'
+    )
+    parser.add_argument(
+        '--total-partitions',
+        type=int,
+        help='Total number of partitions/machines running in parallel (e.g., 2 for two machines)'
+    )
     
     args = parser.parse_args()
+    
+    # Validate partition arguments
+    if (args.partition is not None) != (args.total_partitions is not None):
+        print("Error: --partition and --total-partitions must be used together")
+        return 1
+    
+    if args.partition is not None:
+        if args.partition < 0 or args.partition >= args.total_partitions:
+            print(f"Error: --partition must be between 0 and {args.total_partitions - 1}")
+            return 1
+        if args.total_partitions < 2:
+            print("Error: --total-partitions must be at least 2")
+            return 1
+        
+        getLogger().info(f"Running in partition mode: partition {args.partition + 1}/{args.total_partitions}")
     
     # Setup logging
     basicConfig(
@@ -790,7 +951,7 @@ def main():
         # Load workitems from CSV (only on first run)
         if not args.resume:
             getLogger().info("Loading workitems from CSV...")
-            load_workitems_from_csv(args.csv, state_tracker)
+            load_workitems_from_csv(args.csv, state_tracker, args.partition, args.total_partitions)
         else:
             getLogger().info("Resuming from previous run...")
         
