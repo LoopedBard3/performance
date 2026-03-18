@@ -23,6 +23,13 @@ namespace BenchmarkDotNet.Extensions
 
         public override void ExportToLog(Summary summary, ILogger logger)
         {
+            // Set BDN version as an env var so Reporter picks it up via the PERFLAB_DATA_* handler
+            var bdnVersion = summary.HostEnvironmentInfo.BenchmarkDotNetVersion;
+            if (!string.IsNullOrEmpty(bdnVersion))
+            {
+                Environment.SetEnvironmentVariable("PERFLAB_DATA_BenchmarkDotNetVersion", bdnVersion);
+            }
+
             var reporter = new Reporter();
 
             var hasCriticalErrors = summary.HasCriticalValidationErrors;
