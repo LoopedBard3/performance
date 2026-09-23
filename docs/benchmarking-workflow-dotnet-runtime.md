@@ -159,43 +159,10 @@ Of course only if you want to benchmark these specific libraries. If you don't, 
 
 ### dotnet runtime testing for wasm
 
-#### Pipeline runtime selection
-
-Following [dotnet/runtime#134397](https://github.com/dotnet/runtime/issues/134397),
-current/main runtime inputs no longer build or run Mono in the performance
-pipelines. This includes desktop JIT, interpreter and AOT, and browser Mono
-interpreter/AOT with V8 or JavaScriptCore. Their build registration and artifact
-uploads are excluded as well. CoreCLR, CoreCLR browser WASM (including R2R), and
-NativeAOT coverage remain.
-
-The shared templates retain Mono for .NET 6 through .NET 11 release inputs,
-accepting short or full refs, RC/servicing refs and internal release refs.
-Existing runtime-hosted callers use the PR target branch when present, otherwise
-`Build.SourceBranch`, which is the **runtime** branch, not the performance
-template repository's branch. Cached WASM runs first use
-`downloadSpecificBuild.branchName`, so a performance-main pipeline can consume
-an older runtime artifact.
-
-An explicit `runtimeBranch` takes precedence over all inferred refs. Callers
-building a runtime repository resource must pass its branch to the build, run,
-registration and upload templates. For custom refs, tags or cached PR artifacts,
-use this override only when the runtime's release version is known. Unknown refs
-default to current/no-Mono; this is deliberately broader than a main-only check.
-Do not select a release ref while supplying a main runtime checkout or artifact.
-
-The runtime `release/11.0` performance entrypoint triggers on release commits and
-uses the performance main templates, retaining the .NET 11 Mono comparison runs.
-This is commit-triggered coverage, not a weekly .NET 11 schedule. The SDK pipeline
-separately retains scheduled .NET 11 Mono Blazor size-on-disk/AOT comparisons;
-see [Blazor scenarios](blazor-scenarios.md#pipeline-baselines).
-
-Current builds call the runtime CoreCLR builder directly. The small
-`eng/pipelines/templates/runtime-wasm-build-jobs.yml` wrapper composes the runtime
-platform/build and artifact-preparation templates to build only CoreCLR, because
-the runtime-owned WASM wrapper also unconditionally builds Mono. Keep its
-CoreCLR build arguments and artifact-preparation parameters aligned with the
-runtime template; older release inputs still use the original runtime wrapper.
-The Mono commands below remain useful for these older comparison inputs.
+Mono runs and their Mono-only builds are no longer configured in the performance
+pipelines, including older-runtime comparisons. The tools and scenario assets
+remain available for manual testing; re-enable the necessary pipeline
+configuration explicitly if a Mono run is needed.
 
 In order to run the benchmarks against local [dotnet/runtime](https://github.com/dotnet/runtime) build:
 

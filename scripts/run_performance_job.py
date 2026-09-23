@@ -687,11 +687,6 @@ def get_run_configurations(
         if is_aot:
             configurations["AOT"] = "true"
 
-    if run_kind == "blazor_scenarios" and runtime_flavor:
-        if runtime_flavor not in ("mono", "coreclr"):
-            raise Exception("Runtime flavor must be mono or coreclr for Blazor scenarios")
-        configurations["RuntimeType"] = runtime_flavor
-
     if pgo_run_type == "nodynamicpgo":
         configurations["PGOType"] = "nodynamicpgo"
 

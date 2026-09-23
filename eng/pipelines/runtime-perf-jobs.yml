@@ -11,9 +11,6 @@ parameters:
   - name: performanceRepoAlias
     type: string
     default: self
-  - name: runtimeBranch
-    type: string
-    default: ''
   - name: viperMicro
     type: object
     default:
@@ -35,22 +32,23 @@ parameters:
       enabled: true
       configs:
         - linux_arm64
+  # Accepted for existing runtime perf-gapfill callers; Mono jobs are retired.
   - name: monoMicro
     type: object
     default:
-      enabled: true
+      enabled: false
       configs:
         - linux_x64
   - name: monoInterpreter
     type: object
     default:
-      enabled: true
+      enabled: false
       configs:
         - linux_x64
   - name: monoAot
     type: object
     default:
-      enabled: true
+      enabled: false
       configs:
         - linux_x64
   - name: androidCoreclrJit
@@ -81,24 +79,16 @@ parameters:
       enabled: true
 
 jobs:
-  - template: /eng/pipelines/templates/runtime-mono-jobs.yml@${{ parameters.performanceRepoAlias }}
+  - template: /eng/pipelines/performance/templates/perf-coreclr-build-jobs.yml@${{ parameters.runtimeRepoAlias }}
     parameters:
-      runtimeBranch: ${{ coalesce(parameters.runtimeBranch, variables['System.PullRequest.TargetBranch'], variables['Build.SourceBranch']) }}
-      jobs:
-      - template: /eng/pipelines/performance/templates/perf-build-jobs.yml@${{ parameters.runtimeRepoAlias }}
-        parameters:
-          perfBranch: ${{ parameters.perfBranch }}
-      currentJobs:
-      - template: /eng/pipelines/performance/templates/perf-coreclr-build-jobs.yml@${{ parameters.runtimeRepoAlias }}
-        parameters:
-          linux_x64: true
-          linux_arm64: true
-          windows_x64: true
-          windows_x86: true
-          android_arm64: true
-          coreclr_r2r_interpreter: true
+      linux_x64: true
+      linux_arm64: true
+      windows_x64: true
+      windows_x86: true
+      android_arm64: true
+      coreclr_r2r_interpreter: true
 
-  - ${{ if not(startswith(replace(replace(coalesce(parameters.runtimeBranch, variables['System.PullRequest.TargetBranch'], variables['Build.SourceBranch']), 'refs/heads/', ''), 'internal/', ''), 'release/')) }}:
+  - ${{ if not(startswith(variables['Build.SourceBranch'], 'refs/heads/release')) }}:
     # Build and run iOS CoreCLR and NativeAOT scenarios
     - template: /eng/pipelines/runtime-ios-scenarios-perf-jobs.yml
       parameters:
@@ -226,66 +216,6 @@ jobs:
             ${{ each parameter in parameters.jobParameters }}:
               ${{ parameter.key }}: ${{ parameter.value }}
 
-  - template: /eng/pipelines/templates/runtime-mono-jobs.yml@${{ parameters.performanceRepoAlias }}
-    parameters:
-      runtimeBranch: ${{ coalesce(parameters.runtimeBranch, variables['System.PullRequest.TargetBranch'], variables['Build.SourceBranch']) }}
-      jobs:
-      # Mono microbenchmarks — controlled by monoMicro toggle
-      - ${{ if eq(parameters.monoMicro.enabled, true) }}:
-        - template: /eng/pipelines/common/platform-matrix.yml@${{ parameters.runtimeRepoAlias }}
-          parameters:
-            jobTemplate: /eng/pipelines/templates/runtime-perf-job.yml@${{ parameters.performanceRepoAlias }}
-            buildConfig: release
-            runtimeFlavor: mono
-            platforms: ${{ parameters.monoMicro.configs }}
-            jobParameters:
-              liveLibrariesBuildConfig: Release
-              runtimeType: mono
-              runKind: micro_mono
-              logicalMachine: 'perfviper'
-              runtimeRepoAlias: ${{ parameters.runtimeRepoAlias }}
-              performanceRepoAlias: ${{ parameters.performanceRepoAlias }}
-              ${{ each parameter in parameters.jobParameters }}:
-                ${{ parameter.key }}: ${{ parameter.value }}
-
-      # Mono interpreter — controlled by monoInterpreter toggle
-      - ${{ if eq(parameters.monoInterpreter.enabled, true) }}:
-        - template: /eng/pipelines/common/platform-matrix.yml@${{ parameters.runtimeRepoAlias }}
-          parameters:
-            jobTemplate: /eng/pipelines/templates/runtime-perf-job.yml@${{ parameters.performanceRepoAlias }}
-            buildConfig: release
-            runtimeFlavor: mono
-            platforms: ${{ parameters.monoInterpreter.configs }}
-            jobParameters:
-              liveLibrariesBuildConfig: Release
-              runtimeType: mono
-              codeGenType: 'Interpreter'
-              runKind: micro_mono
-              logicalMachine: 'perfviper'
-              runtimeRepoAlias: ${{ parameters.runtimeRepoAlias }}
-              performanceRepoAlias: ${{ parameters.performanceRepoAlias }}
-              ${{ each parameter in parameters.jobParameters }}:
-                ${{ parameter.key }}: ${{ parameter.value }}
-
-      # Mono AOT microbenchmarks — controlled by monoAot toggle
-      - ${{ if eq(parameters.monoAot.enabled, true) }}:
-        - template: /eng/pipelines/common/platform-matrix.yml@${{ parameters.runtimeRepoAlias }}
-          parameters:
-            jobTemplate: /eng/pipelines/templates/runtime-perf-job.yml@${{ parameters.performanceRepoAlias }}
-            buildConfig: release
-            runtimeFlavor: aot
-            platforms: ${{ parameters.monoAot.configs }}
-            jobParameters:
-              liveLibrariesBuildConfig: Release
-              runtimeType: mono
-              codeGenType: 'AOT'
-              runKind: micro_mono
-              logicalMachine: 'perfviper'
-              runtimeRepoAlias: ${{ parameters.runtimeRepoAlias }}
-              performanceRepoAlias: ${{ parameters.performanceRepoAlias }}
-              ${{ each parameter in parameters.jobParameters }}:
-                ${{ parameter.key }}: ${{ parameter.value }}
-
   # CoreCLR Viper microbenchmarks — controlled by viperMicro toggle.
   # Platform selection is driven by viperMicro.configs (default: linux_x64, windows_x64, windows_x86).
   - ${{ if eq(parameters.viperMicro.enabled, true) }}:
@@ -327,7 +257,7 @@ jobs:
 
   # CoreCLR Cobalt microbenchmarks — controlled by cobaltMicro toggle.
   # Excluded on release branches — the arm64 coreclr build doesn't exist in older runtime branches.
-  - ${{ if and(eq(parameters.cobaltMicro.enabled, true), not(startswith(replace(replace(coalesce(parameters.runtimeBranch, variables['System.PullRequest.TargetBranch'], variables['Build.SourceBranch']), 'refs/heads/', ''), 'internal/', ''), 'release/'))) }}:
+  - ${{ if and(eq(parameters.cobaltMicro.enabled, true), not(startswith(variables['Build.SourceBranch'], 'refs/heads/release'))) }}:
     - template: /eng/pipelines/common/platform-matrix.yml@${{ parameters.runtimeRepoAlias }}
       parameters:
         jobTemplate: /eng/pipelines/templates/runtime-perf-job.yml@${{ parameters.performanceRepoAlias }}
@@ -347,7 +277,7 @@ jobs:
   # CoreCLR Cobalt microbenchmarks runtime-async experiment — controlled by cobaltMicroRuntimeAsync toggle.
   # Enables the runtime-async feature via the 'runtimeasync' experiment.
   # Excluded on release branches — the arm64 coreclr build doesn't exist in older runtime branches.
-  - ${{ if and(eq(parameters.cobaltMicroRuntimeAsync.enabled, true), not(startswith(replace(replace(coalesce(parameters.runtimeBranch, variables['System.PullRequest.TargetBranch'], variables['Build.SourceBranch']), 'refs/heads/', ''), 'internal/', ''), 'release/'))) }}:
+  - ${{ if and(eq(parameters.cobaltMicroRuntimeAsync.enabled, true), not(startswith(variables['Build.SourceBranch'], 'refs/heads/release'))) }}:
     - template: /eng/pipelines/common/platform-matrix.yml@${{ parameters.runtimeRepoAlias }}
       parameters:
         jobTemplate: /eng/pipelines/templates/runtime-perf-job.yml@${{ parameters.performanceRepoAlias }}
@@ -368,7 +298,7 @@ jobs:
 
   # CoreCLR Cobalt SVE microbenchmarks — controlled by cobaltSveMicro toggle.
   # Excluded on release branches — the arm64 coreclr build doesn't exist in older runtime branches.
-  - ${{ if and(eq(parameters.cobaltSveMicro.enabled, true), not(startswith(replace(replace(coalesce(parameters.runtimeBranch, variables['System.PullRequest.TargetBranch'], variables['Build.SourceBranch']), 'refs/heads/', ''), 'internal/', ''), 'release/'))) }}:
+  - ${{ if and(eq(parameters.cobaltSveMicro.enabled, true), not(startswith(variables['Build.SourceBranch'], 'refs/heads/release'))) }}:
     - template: /eng/pipelines/common/platform-matrix.yml@${{ parameters.runtimeRepoAlias }}
       parameters:
         jobTemplate: /eng/pipelines/templates/runtime-perf-job.yml@${{ parameters.performanceRepoAlias }}
@@ -389,7 +319,7 @@ jobs:
 
   # CoreCLR Cobalt microbenchmarks Composite R2R with interpreter fallback — controlled by cobaltMicroR2RInterpreter toggle.
   # Excluded on release branches — the coreclr_r2r_interpreter build doesn't exist in older runtime branches.
-  - ${{ if and(eq(parameters.cobaltMicroR2RInterpreter.enabled, true), not(startswith(replace(replace(coalesce(parameters.runtimeBranch, variables['System.PullRequest.TargetBranch'], variables['Build.SourceBranch']), 'refs/heads/', ''), 'internal/', ''), 'release/'))) }}:
+  - ${{ if and(eq(parameters.cobaltMicroR2RInterpreter.enabled, true), not(startswith(variables['Build.SourceBranch'], 'refs/heads/release'))) }}:
     - template: /eng/pipelines/common/platform-matrix.yml@${{ parameters.runtimeRepoAlias }}
       parameters:
         jobTemplate: /eng/pipelines/templates/runtime-perf-job.yml@${{ parameters.performanceRepoAlias }}
