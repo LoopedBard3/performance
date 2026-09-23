@@ -1,6 +1,7 @@
 parameters:
   runtimeRepoAlias: runtime
   performanceRepoAlias: self
+  runtimeBranch: ''
   buildType: []
   mauiFramework: ''
   # repoName is forwarded into each register-build-job invocation so the
@@ -18,9 +19,21 @@ parameters:
 
 jobs:
 - ${{ each type in parameters.buildType }}:
-  - template: /eng/pipelines/templates/register-build-job.yml@${{ parameters.performanceRepoAlias }}
-    parameters:
-      buildType: ${{ type }}
-      buildId: $(Build.BuildId)
-      repoName: ${{ parameters.repoName }}
-      sha: ${{ parameters.sha }}
+  - ${{ if and(eq(parameters.repoName, 'runtime'), in(type, 'wasm', 'mono_x64_linux', 'mono_arm64_linux', 'monoAot_x64_linux', 'monoAot_arm64_linux')) }}:
+    - template: /eng/pipelines/templates/runtime-mono-jobs.yml@${{ parameters.performanceRepoAlias }}
+      parameters:
+        runtimeBranch: ${{ coalesce(parameters.runtimeBranch, variables['System.PullRequest.TargetBranch'], variables['Build.SourceBranch']) }}
+        jobs:
+        - template: /eng/pipelines/templates/register-build-job.yml@${{ parameters.performanceRepoAlias }}
+          parameters:
+            buildType: ${{ type }}
+            buildId: $(Build.BuildId)
+            repoName: ${{ parameters.repoName }}
+            sha: ${{ parameters.sha }}
+  - ${{ else }}:
+    - template: /eng/pipelines/templates/register-build-job.yml@${{ parameters.performanceRepoAlias }}
+      parameters:
+        buildType: ${{ type }}
+        buildId: $(Build.BuildId)
+        repoName: ${{ parameters.repoName }}
+        sha: ${{ parameters.sha }}

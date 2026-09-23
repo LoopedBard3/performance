@@ -1,0 +1,17 @@
+parameters:
+  - name: runtimeBranch
+    type: string
+  - name: jobs
+    type: object
+    default: []
+  - name: currentJobs
+    type: object
+    default: []
+
+jobs:
+# Mono comparisons use .NET 11 or older runtime inputs, never current/main.
+# Match the release major, including servicing/RC and internal release refs.
+- ${{ if in(split(replace(replace(parameters.runtimeBranch, 'refs/heads/', ''), 'internal/', ''), '.')[0], 'release/6', 'release/7', 'release/8', 'release/9', 'release/10', 'release/11') }}:
+  - ${{ parameters.jobs }}
+- ${{ else }}:
+  - ${{ parameters.currentJobs }}

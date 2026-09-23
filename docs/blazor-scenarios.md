@@ -7,6 +7,21 @@ An introduction of how to run scenario tests can be found in [Scenarios Tests Gu
 
 ## New Blazorwasm Template Size On Disk
 
+### Pipeline baselines
+
+The SDK pipeline runs these historical Mono size-on-disk and AOT scenarios on
+the explicit `11.0` channel, alongside the existing `9.0` and `8.0` comparisons,
+rather than following `main` into .NET 12. The `11.0` channel selects the .NET 11
+daily SDK and `net11.0` target framework. The jobs are identified as
+`MonoBaseline`, with `RuntimeType=mono` in their result configuration. Public
+correctness coverage and the internal every-12-hours schedule both retain these
+baselines.
+
+This does not replace current CoreCLR browser WASM microbenchmark or R2R lanes
+with older SDKs. The runtime-built Blazor scenario remains disabled under its
+existing tracking issue. Mobile Mono comparisons also remain on the existing
+.NET 10 MAUI baseline; the main-channel Mono smoke jobs are retired.
+
 **New Blazorwasm Template Size On Disk** is a scenario test that meausres the size of published output of blazorwasm template. In other words, our test harness *implicitly* calls
 
 ```cmd
