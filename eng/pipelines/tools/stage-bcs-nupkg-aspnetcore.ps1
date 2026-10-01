@@ -21,6 +21,8 @@
          (excluding the *.symbols.nupkg), asserting exactly one match.
       2. Copies it to $StagingRoot/{artifactName}/{artifactName}.nupkg, renaming to
          the fixed, version-independent BCS artifact name crank resolves from a sha.
+      3. Selects exactly one matching-version Microsoft.AspNetCore.App.Ref nupkg
+         and stores both original packages at the root of FrameworkPackages_*.zip.
 
 .PARAMETER Rids
     One or more .NET RIDs to stage (e.g. win-x64, win-x86, win-arm64, linux-x64,
@@ -116,6 +118,16 @@ foreach ($rid in $Rids) {
     $nupkg = $nupkgMatches[0]
     Write-Host "Found nupkg: $($nupkg.FullName)"
 
+    $refMatches = @(Get-ChildItem -Path $ShippingDir -Filter 'Microsoft.AspNetCore.App.Ref.*.nupkg' -File |
+        Where-Object { $_.Name -notmatch '\.symbols\.nupkg$' })
+    if ($refMatches.Count -ne 1) {
+        throw "Expected exactly one Microsoft.AspNetCore.App.Ref nupkg under '$ShippingDir', found $($refMatches.Count)."
+    }
+    $versionSuffix = $nupkg.Name.Substring("Microsoft.AspNetCore.App.Runtime.$rid.".Length)
+    if ($refMatches[0].Name -cne "Microsoft.AspNetCore.App.Ref.$versionSuffix") {
+        throw "Runtime and Ref package versions do not match: '$($nupkg.Name)' and '$($refMatches[0].Name)'."
+    }
+
     # Stage the nupkg verbatim under the fixed, version-independent BCS artifact
     # name. The real nupkg filename embeds the build version (e.g.
     # ...win-x64.10.0.0-dev.nupkg), which crank cannot predict from a commit sha;
@@ -132,4 +144,18 @@ foreach ($rid in $Rids) {
 
     $size = (Get-Item $stagedPath).Length
     Write-Host "Staged nupkg: $stagedPath ($size bytes)"
+
+    $zipPath = Join-Path $stageDir "FrameworkPackages_${os}_${arch}_Release_aspnetcore.zip"
+    $archive = [System.IO.Compression.ZipFile]::Open($zipPath, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        foreach ($package in @($nupkg, $refMatches[0])) {
+            [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                $archive, $package.FullName, $package.Name,
+                [System.IO.Compression.CompressionLevel]::NoCompression) | Out-Null
+        }
+    }
+    finally {
+        $archive.Dispose()
+    }
+    Write-Host "Staged framework packages: $zipPath"
 }

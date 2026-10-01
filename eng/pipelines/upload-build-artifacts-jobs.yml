@@ -22,55 +22,70 @@ jobs:
       parameters:
         buildType: 'coreclr_arm64_linux'
         dependencyJobName: build_linux_arm64_release_coreclr
+        immutableFiles: [ 'RuntimeDistribution_linux_arm64_Release_coreclr.zip' ]
         repoName: ${{ parameters.repoName }}
         sha: ${{ parameters.sha }}
         artifacts:
         - artifactName: 'BuildArtifacts_linux_arm64_Release_coreclr'
           files: [ 'BuildArtifacts_linux_arm64_Release_coreclr.tar.gz' ]
+        - artifactName: 'RuntimeDistribution_linux_arm64_Release_coreclr'
+          files: [ 'RuntimeDistribution_linux_arm64_Release_coreclr.zip' ]
 
   - ${{ if containsValue(parameters.buildType, 'coreclr_arm64_windows') }}:
     - template: /eng/pipelines/templates/upload-build-artifacts-job.yml@${{ parameters.performanceRepoAlias }}
       parameters:
         buildType: 'coreclr_arm64_windows'
         dependencyJobName: build_windows_arm64_release_coreclr
+        immutableFiles: [ 'RuntimeDistribution_windows_arm64_Release_coreclr.zip' ]
         repoName: ${{ parameters.repoName }}
         sha: ${{ parameters.sha }}
         artifacts:
         - artifactName: 'BuildArtifacts_windows_arm64_Release_coreclr'
           files: [ 'BuildArtifacts_windows_arm64_Release_coreclr.zip' ]
+        - artifactName: 'RuntimeDistribution_windows_arm64_Release_coreclr'
+          files: [ 'RuntimeDistribution_windows_arm64_Release_coreclr.zip' ]
 
   - ${{ if containsValue(parameters.buildType, 'coreclr_x64_linux') }}:
     - template: /eng/pipelines/templates/upload-build-artifacts-job.yml@${{ parameters.performanceRepoAlias }}
       parameters:
         buildType: 'coreclr_x64_linux'
         dependencyJobName: build_linux_x64_release_coreclr
+        immutableFiles: [ 'RuntimeDistribution_linux_x64_Release_coreclr.zip' ]
         repoName: ${{ parameters.repoName }}
         sha: ${{ parameters.sha }}
         artifacts:
         - artifactName: 'BuildArtifacts_linux_x64_Release_coreclr'
           files: [ 'BuildArtifacts_linux_x64_Release_coreclr.tar.gz' ]
+        - artifactName: 'RuntimeDistribution_linux_x64_Release_coreclr'
+          files: [ 'RuntimeDistribution_linux_x64_Release_coreclr.zip' ]
 
   - ${{ if containsValue(parameters.buildType, 'coreclr_x64_windows') }}:
     - template: /eng/pipelines/templates/upload-build-artifacts-job.yml@${{ parameters.performanceRepoAlias }}
       parameters:
         buildType: 'coreclr_x64_windows'
         dependencyJobName: build_windows_x64_release_coreclr
+        immutableFiles: [ 'RuntimeDistribution_windows_x64_Release_coreclr.zip' ]
         repoName: ${{ parameters.repoName }}
         sha: ${{ parameters.sha }}
         artifacts:
         - artifactName: 'BuildArtifacts_windows_x64_Release_coreclr'
           files: [ 'BuildArtifacts_windows_x64_Release_coreclr.zip' ]
+        - artifactName: 'RuntimeDistribution_windows_x64_Release_coreclr'
+          files: [ 'RuntimeDistribution_windows_x64_Release_coreclr.zip' ]
 
   - ${{ if containsValue(parameters.buildType, 'coreclr_x86_windows') }}:
     - template: /eng/pipelines/templates/upload-build-artifacts-job.yml@${{ parameters.performanceRepoAlias }}
       parameters:
         buildType: 'coreclr_x86_windows'
         dependencyJobName: build_windows_x86_release_coreclr
+        immutableFiles: [ 'RuntimeDistribution_windows_x86_Release_coreclr.zip' ]
         repoName: ${{ parameters.repoName }}
         sha: ${{ parameters.sha }}
         artifacts:
         - artifactName: 'BuildArtifacts_windows_x86_Release_coreclr'
           files: [ 'BuildArtifacts_windows_x86_Release_coreclr.zip' ]
+        - artifactName: 'RuntimeDistribution_windows_x86_Release_coreclr'
+          files: [ 'RuntimeDistribution_windows_x86_Release_coreclr.zip' ]
 
   - ${{ if containsValue(parameters.buildType, 'coreclr_arm64_android') }}:
     - template: /eng/pipelines/templates/upload-build-artifacts-job.yml@${{ parameters.performanceRepoAlias }}
@@ -196,52 +211,57 @@ jobs:
       parameters:
         buildType: 'aspnetcore_x64_linux'
         dependencyJobName: Linux_x64_build
+        immutableFiles: [ 'FrameworkPackages_linux_x64_Release_aspnetcore.zip' ]
         repoName: ${{ parameters.repoName }}
         sha: ${{ parameters.sha }}
         artifacts:
         - artifactName: 'BuildArtifacts_linux_x64_Release_aspnetcore'
-          files: [ 'BuildArtifacts_linux_x64_Release_aspnetcore.nupkg' ]
+          files: [ 'BuildArtifacts_linux_x64_Release_aspnetcore.nupkg', 'FrameworkPackages_linux_x64_Release_aspnetcore.zip' ]
 
   - ${{ if containsValue(parameters.buildType, 'aspnetcore_arm64_linux') }}:
     - template: /eng/pipelines/templates/upload-build-artifacts-job.yml@${{ parameters.performanceRepoAlias }}
       parameters:
         buildType: 'aspnetcore_arm64_linux'
         dependencyJobName: Linux_arm64_build
+        immutableFiles: [ 'FrameworkPackages_linux_arm64_Release_aspnetcore.zip' ]
         repoName: ${{ parameters.repoName }}
         sha: ${{ parameters.sha }}
         artifacts:
         - artifactName: 'BuildArtifacts_linux_arm64_Release_aspnetcore'
-          files: [ 'BuildArtifacts_linux_arm64_Release_aspnetcore.nupkg' ]
+          files: [ 'BuildArtifacts_linux_arm64_Release_aspnetcore.nupkg', 'FrameworkPackages_linux_arm64_Release_aspnetcore.zip' ]
 
   - ${{ if containsValue(parameters.buildType, 'aspnetcore_x64_windows') }}:
     - template: /eng/pipelines/templates/upload-build-artifacts-job.yml@${{ parameters.performanceRepoAlias }}
       parameters:
         buildType: 'aspnetcore_x64_windows'
         dependencyJobName: Windows_build
+        immutableFiles: [ 'FrameworkPackages_windows_x64_Release_aspnetcore.zip' ]
         repoName: ${{ parameters.repoName }}
         sha: ${{ parameters.sha }}
         artifacts:
         - artifactName: 'BuildArtifacts_windows_x64_Release_aspnetcore'
-          files: [ 'BuildArtifacts_windows_x64_Release_aspnetcore.nupkg' ]
+          files: [ 'BuildArtifacts_windows_x64_Release_aspnetcore.nupkg', 'FrameworkPackages_windows_x64_Release_aspnetcore.zip' ]
 
   - ${{ if containsValue(parameters.buildType, 'aspnetcore_arm64_windows') }}:
     - template: /eng/pipelines/templates/upload-build-artifacts-job.yml@${{ parameters.performanceRepoAlias }}
       parameters:
         buildType: 'aspnetcore_arm64_windows'
         dependencyJobName: Windows_build
+        immutableFiles: [ 'FrameworkPackages_windows_arm64_Release_aspnetcore.zip' ]
         repoName: ${{ parameters.repoName }}
         sha: ${{ parameters.sha }}
         artifacts:
         - artifactName: 'BuildArtifacts_windows_arm64_Release_aspnetcore'
-          files: [ 'BuildArtifacts_windows_arm64_Release_aspnetcore.nupkg' ]
+          files: [ 'BuildArtifacts_windows_arm64_Release_aspnetcore.nupkg', 'FrameworkPackages_windows_arm64_Release_aspnetcore.zip' ]
 
   - ${{ if containsValue(parameters.buildType, 'aspnetcore_x86_windows') }}:
     - template: /eng/pipelines/templates/upload-build-artifacts-job.yml@${{ parameters.performanceRepoAlias }}
       parameters:
         buildType: 'aspnetcore_x86_windows'
         dependencyJobName: Windows_build
+        immutableFiles: [ 'FrameworkPackages_windows_x86_Release_aspnetcore.zip' ]
         repoName: ${{ parameters.repoName }}
         sha: ${{ parameters.sha }}
         artifacts:
         - artifactName: 'BuildArtifacts_windows_x86_Release_aspnetcore'
-          files: [ 'BuildArtifacts_windows_x86_Release_aspnetcore.nupkg' ]
+          files: [ 'BuildArtifacts_windows_x86_Release_aspnetcore.nupkg', 'FrameworkPackages_windows_x86_Release_aspnetcore.zip' ]

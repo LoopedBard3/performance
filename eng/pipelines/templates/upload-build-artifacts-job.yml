@@ -2,6 +2,8 @@ parameters:
   buildType: ''
   dependencyJobName: ''
   artifacts: []
+  # Complete package ZIPs are create-only; existing raw uploads remain overwritable.
+  immutableFiles: []
   # repoName controls the {repoName} segment of the BCS blob path:
   #   builds/{repoName}/buildArtifacts/{sha}/{buildType}/{file}
   # Defaults to 'runtime' for back-compat with the existing runtime perf-build pipeline.
@@ -38,5 +40,10 @@ jobs:
           azureSubscription: '.NET Performance (790c4451-dad9-4fda-af8b-10bd9ca328fa)'
           scriptType: 'pscore'
           scriptLocation: 'inlineScript'
-          inlineScript: |
-            az storage blob upload --auth-mode login --account-name pvscmdupload --container-name '$web' --file "$(Pipeline.Workspace)/${{ artifact.artifactName }}/${{ fileName }}" --name "builds/${{ parameters.repoName }}/buildArtifacts/${{ parameters.sha }}/${{ parameters.buildType }}/${{ fileName }}" --overwrite true
+          ${{ if containsValue(parameters.immutableFiles, fileName) }}:
+            inlineScript: |
+              az storage blob upload --auth-mode login --account-name pvscmdupload --container-name '$web' --file "$(Pipeline.Workspace)/${{ artifact.artifactName }}/${{ fileName }}" --name "builds/${{ parameters.repoName }}/buildArtifacts/${{ parameters.sha }}/${{ parameters.buildType }}/${{ fileName }}" --type block --overwrite false --if-none-match '*'
+              if ($LASTEXITCODE -ne 0) { throw "Package ZIP upload failed; an existing publication cannot be replaced." }
+          ${{ else }}:
+            inlineScript: |
+              az storage blob upload --auth-mode login --account-name pvscmdupload --container-name '$web' --file "$(Pipeline.Workspace)/${{ artifact.artifactName }}/${{ fileName }}" --name "builds/${{ parameters.repoName }}/buildArtifacts/${{ parameters.sha }}/${{ parameters.buildType }}/${{ fileName }}" --overwrite true
