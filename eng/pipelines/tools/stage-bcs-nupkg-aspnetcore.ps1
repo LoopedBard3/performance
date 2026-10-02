@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
     Stages the per-RID Microsoft.AspNetCore.App runtime-pack nupkg as the Build
-    Cache Service (BCS) artifact for the perf-build pipeline.
+    Cache Service (BCS) artifact, plus the canonical dotnet-install archives.
 
 .DESCRIPTION
     The single, canonical "find the runtime-pack nupkg and stage it under the BCS
@@ -21,6 +21,13 @@
          (excluding the *.symbols.nupkg), asserting exactly one match.
       2. Copies it to $StagingRoot/{artifactName}/{artifactName}.nupkg, renaming to
          the fixed, version-independent BCS artifact name crank resolves from a sha.
+      3. Copies the matching aspnetcore-runtime archives and original nupkg into
+         BcsInstallers_{os}_{arch}_Release_aspnetcore/aspnetcore/Runtime/{version}/,
+         then writes aspnetcore/Runtime/main/latest.version.
+
+    Archives are produced by aspnetcore-runtime.proj during the primary build.
+    They include the base .NET runtime and host: consumers selecting a different
+    runtime must install separately and promote only shared/Microsoft.AspNetCore.App.
 
 .PARAMETER Rids
     One or more .NET RIDs to stage (e.g. win-x64, win-x86, win-arm64, linux-x64,
@@ -132,4 +139,38 @@ foreach ($rid in $Rids) {
 
     $size = (Get-Item $stagedPath).Length
     Write-Host "Staged nupkg: $stagedPath ($size bytes)"
+
+    $version = $nupkg.Name.Substring("Microsoft.AspNetCore.App.Runtime.$rid.".Length)
+    $version = $version.Substring(0, $version.Length - '.nupkg'.Length)
+    if ($version -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
+        throw "Unexpected runtime pack version '$version' in '$($nupkg.Name)'."
+    }
+
+    $extensions = @('tar.gz')
+    if ($os -eq 'windows') {
+        $extensions += 'zip'
+    }
+    $archives = foreach ($extension in $extensions) {
+        $archive = Join-Path $ShippingDir "aspnetcore-runtime-$version-$rid.$extension"
+        if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) {
+            throw "Missing primary-build installer archive '$archive'."
+        }
+        Get-Item -LiteralPath $archive
+    }
+
+    $installerRoot = Join-Path $StagingRoot "BcsInstallers_${os}_${arch}_Release_aspnetcore"
+    if (Test-Path -LiteralPath $installerRoot) {
+        Remove-Item -LiteralPath $installerRoot -Recurse -Force
+    }
+    $productRoot = Join-Path $installerRoot 'aspnetcore/Runtime'
+    $versionRoot = Join-Path $productRoot $version
+    New-Item -ItemType Directory -Path $versionRoot -Force | Out-Null
+    foreach ($archive in $archives) {
+        Copy-Item -LiteralPath $archive.FullName -Destination $versionRoot
+    }
+    Copy-Item -LiteralPath $nupkg.FullName -Destination $versionRoot
+    $channelRoot = Join-Path $productRoot 'main'
+    New-Item -ItemType Directory -Path $channelRoot -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $channelRoot 'latest.version') -Value $version -Encoding ascii
+    Write-Host "Staged installer feed: $installerRoot ($version)"
 }

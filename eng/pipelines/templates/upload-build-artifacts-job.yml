@@ -40,3 +40,48 @@ jobs:
           scriptLocation: 'inlineScript'
           inlineScript: |
             az storage blob upload --auth-mode login --account-name pvscmdupload --container-name '$web' --file "$(Pipeline.Workspace)/${{ artifact.artifactName }}/${{ fileName }}" --name "builds/${{ parameters.repoName }}/buildArtifacts/${{ parameters.sha }}/${{ parameters.buildType }}/${{ fileName }}" --overwrite true
+    - ${{ if in(artifact.installerProduct, 'Runtime', 'aspnetcore/Runtime') }}:
+      - download: current
+        displayName: Download installer feed
+        artifact: ${{ replace(artifact.artifactName, 'BuildArtifacts_', 'BcsInstallers_') }}
+      - task: AzureCLI@2
+        displayName: 'Upload installer feed (latest.version last)'
+        inputs:
+          azureSubscription: '.NET Performance (790c4451-dad9-4fda-af8b-10bd9ca328fa)'
+          scriptType: 'pscore'
+          scriptLocation: 'inlineScript'
+          inlineScript: |
+            $ErrorActionPreference = 'Stop'
+            Set-StrictMode -Version Latest
+            $root = "$(Pipeline.Workspace)/${{ replace(artifact.artifactName, 'BuildArtifacts_', 'BcsInstallers_') }}"
+            $product = '${{ artifact.installerProduct }}'
+            $rid = '${{ artifact.installerRid }}'
+            $feed = "builds/${{ parameters.repoName }}/buildArtifacts/${{ parameters.sha }}/${{ parameters.buildType }}/install"
+            $marker = "$root/$product/main/latest.version"
+            $lines = @(Get-Content -LiteralPath $marker | Where-Object { $_.Trim() })
+            if ($lines.Count -eq 0 -or $lines[-1] -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
+                throw "Invalid installer version in '$marker'."
+            }
+            $version = $lines[-1]
+            $source = "$root/$product/$version"
+            $prefix = if ($product -eq 'Runtime') { 'dotnet-runtime' } else { 'aspnetcore-runtime' }
+            $extensions = @('tar.gz')
+            if ($rid.StartsWith('win-')) { $extensions += 'zip' }
+            foreach ($extension in $extensions) {
+                $archive = "$source/$prefix-$version-$rid.$extension"
+                if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) {
+                    throw "Missing required installer archive '$archive'."
+                }
+            }
+            $exists = az storage blob exists --auth-mode login --account-name pvscmdupload --container-name '$web' --name "$feed/$product/main/latest.version" --query exists -o tsv
+            if ($LASTEXITCODE -ne 0 -or $exists -notin @('true', 'false')) { throw 'Could not check existing installer feed.' }
+            if ($exists -eq 'true') {
+                Write-Host "Installer feed already published: $feed"
+            } else {
+                foreach ($file in (Get-ChildItem -LiteralPath $source -File | Sort-Object Name)) {
+                    az storage blob upload --auth-mode login --account-name pvscmdupload --container-name '$web' --file $file.FullName --name "$feed/$product/$version/$($file.Name)" --overwrite false --if-none-match '*'
+                    if ($LASTEXITCODE -ne 0) { throw "Installer upload failed: $($file.Name). Version marker will not be published." }
+                }
+                az storage blob upload --auth-mode login --account-name pvscmdupload --container-name '$web' --file $marker --name "$feed/$product/main/latest.version" --overwrite false --if-none-match '*'
+                if ($LASTEXITCODE -ne 0) { throw 'Installer version marker upload failed.' }
+            }

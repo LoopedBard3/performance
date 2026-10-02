@@ -45,6 +45,9 @@
 # BCS output layout:
 #   builds/aspnetcore/buildArtifacts/{sha}/{configKey}/buildInfo.json
 #   builds/aspnetcore/buildArtifacts/{sha}/{configKey}/{archiveFile}
+#   builds/aspnetcore/buildArtifacts/{sha}/{configKey}/install/aspnetcore/Runtime/...
+# The installer feed's standard latest.version is uploaded last, independently
+# of buildInfo.json. See docs/bcs-installers.md for the consumer contract.
 #
 
 parameters:
@@ -89,7 +92,7 @@ variables:
 - name: _AspNetCoreSha
   value: $[ resources.repositories.aspnetcore.version ]
 # Lean build args mirrored from aspnetcore ci-public.yml. Deliberately omit
-# signing / installers / helix / publishing and any internal runtime download
+# signing / native installer jobs / helix / publishing and any internal runtime download
 # (public feeds only) -- none contribute to the per-RID runtime pack.
 - name: _BuildArgs
   value: /p:TeamName=$(_TeamName)

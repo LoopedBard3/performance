@@ -12,7 +12,9 @@
 # own eng/build with lean perf args (PUBLIC feeds only -- no internal runtime
 # download), stage each per-RID runtime-pack nupkg verbatim as the BCS artifact via
 # the moved eng/pipelines/tools/stage-bcs-nupkg-aspnetcore.ps1, and publish one
-# pipeline artifact per config.
+# raw pipeline artifact and one installer-feed artifact per config.
+# The primary build already creates canonical archives in Shipping through
+# aspnetcore-runtime.proj; OnlyPackPlatformSpecificPackages does not suppress them.
 #
 # Job names (Windows_build / Linux_x64_build / Linux_arm64_build) are load-bearing:
 # they must match the `dependencyJobName` values in
@@ -153,6 +155,11 @@ jobs:
         inputs:
           targetPath: $(_StagingRoot)\BuildArtifacts_windows_x64_Release_aspnetcore
           artifactName: BuildArtifacts_windows_x64_Release_aspnetcore
+      - task: PublishPipelineArtifact@1
+        displayName: 'Publish BcsInstallers_windows_x64_Release_aspnetcore'
+        inputs:
+          targetPath: $(_StagingRoot)\BcsInstallers_windows_x64_Release_aspnetcore
+          artifactName: BcsInstallers_windows_x64_Release_aspnetcore
 
     - ${{ if eq(parameters.aspnetcore_x86_windows, true) }}:
       - pwsh: >-
@@ -163,6 +170,11 @@ jobs:
         inputs:
           targetPath: $(_StagingRoot)\BuildArtifacts_windows_x86_Release_aspnetcore
           artifactName: BuildArtifacts_windows_x86_Release_aspnetcore
+      - task: PublishPipelineArtifact@1
+        displayName: 'Publish BcsInstallers_windows_x86_Release_aspnetcore'
+        inputs:
+          targetPath: $(_StagingRoot)\BcsInstallers_windows_x86_Release_aspnetcore
+          artifactName: BcsInstallers_windows_x86_Release_aspnetcore
 
     - ${{ if eq(parameters.aspnetcore_arm64_windows, true) }}:
       - pwsh: >-
@@ -173,6 +185,11 @@ jobs:
         inputs:
           targetPath: $(_StagingRoot)\BuildArtifacts_windows_arm64_Release_aspnetcore
           artifactName: BuildArtifacts_windows_arm64_Release_aspnetcore
+      - task: PublishPipelineArtifact@1
+        displayName: 'Publish BcsInstallers_windows_arm64_Release_aspnetcore'
+        inputs:
+          targetPath: $(_StagingRoot)\BcsInstallers_windows_arm64_Release_aspnetcore
+          artifactName: BcsInstallers_windows_arm64_Release_aspnetcore
 
     - task: PublishPipelineArtifact@1
       displayName: 'Publish Windows build logs'
@@ -232,6 +249,11 @@ jobs:
       inputs:
         targetPath: $(_StagingRoot)/BuildArtifacts_linux_x64_Release_aspnetcore
         artifactName: BuildArtifacts_linux_x64_Release_aspnetcore
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish BcsInstallers_linux_x64_Release_aspnetcore'
+      inputs:
+        targetPath: $(_StagingRoot)/BcsInstallers_linux_x64_Release_aspnetcore
+        artifactName: BcsInstallers_linux_x64_Release_aspnetcore
 
     - task: PublishPipelineArtifact@1
       displayName: 'Publish Linux x64 build logs'
@@ -302,6 +324,11 @@ jobs:
       inputs:
         targetPath: $(_StagingRoot)/BuildArtifacts_linux_arm64_Release_aspnetcore
         artifactName: BuildArtifacts_linux_arm64_Release_aspnetcore
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish BcsInstallers_linux_arm64_Release_aspnetcore'
+      inputs:
+        targetPath: $(_StagingRoot)/BcsInstallers_linux_arm64_Release_aspnetcore
+        artifactName: BcsInstallers_linux_arm64_Release_aspnetcore
 
     - task: PublishPipelineArtifact@1
       displayName: 'Publish Linux arm64 build logs'
