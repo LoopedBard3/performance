@@ -3,11 +3,55 @@ Because of how pytest finds things, all import modules must start with scripts.
 '''
 
 from scripts.dotnet import CSharpProject, CSharpProjFile
+from scripts import dotnet
 import os
 import subprocess
 from unittest.mock import Mock
 
 import pytest
+
+
+@pytest.mark.parametrize("platform", ["win32", "linux"])
+@pytest.mark.parametrize(
+    ("channel", "versions", "expected_selection"),
+    [
+        ("main", [], ["-Channel", "11.0", "-Quality", "preview"]),
+        ("11.0", [], ["-Channel", "11.0", "-Quality", "preview"]),
+        ("release/11.0", [], ["-Channel", "11.0", "-Quality", "preview"]),
+        ("nativeaot11.0", [], ["-Channel", "11.0", "-Quality", "preview"]),
+        ("release/10.0", [], ["-Channel", "10.0"]),
+        ("nativeaot10.0", [], ["-Channel", "10.0", "-Quality", "daily"]),
+        ("main", ["11.0.100-rc.2.26508.107"], ["-Version", "11.0.100-rc.2.26508.107"]),
+    ],
+)
+def test_install_sdk_selection(
+        tmp_path, monkeypatch, platform, channel, versions, expected_selection):
+    response = Mock()
+    response.info.return_value = {"Content-Type": "text/plain"}
+    response.read.return_value = b"dotnet-install"
+    download = Mock()
+    download.return_value.__enter__ = Mock(return_value=response)
+    download.return_value.__exit__ = Mock(return_value=False)
+    command = Mock()
+    monkeypatch.setattr(dotnet, "platform", platform)
+    monkeypatch.setattr(dotnet, "urlopen", download)
+    monkeypatch.setattr(dotnet, "RunCommand", command)
+    monkeypatch.setattr(dotnet, "setup_dotnet", Mock())
+    monkeypatch.setattr(dotnet, "get_repo_root_path", lambda: str(tmp_path / "performance"))
+    install_dir = str(tmp_path / "sdk")
+
+    dotnet.install(
+        architecture="x64",
+        channels=[channel],
+        versions=versions,
+        verbose=False,
+        install_dir=install_dir,
+    )
+
+    command.assert_called_once()
+    arguments = command.call_args.args[0]
+    selection_start = arguments.index("-Architecture") + 2
+    assert arguments[selection_start:] == expected_selection
 
 
 def test_new():

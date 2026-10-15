@@ -1,21 +1,22 @@
 from typing import Optional
 
 class ChannelMap():
+    # Use public .NET 11 previews until RTM runtime packs are available for tool restores.
     channel_map = {
         'main': {
             'tfm': 'net11.0',
             'branch': '11.0',
-            'quality': 'daily'
+            'quality': 'preview'
         },
         '11.0': {
             'tfm': 'net11.0',
             'branch': '11.0',
-            'quality': 'daily'
+            'quality': 'preview'
         },
         'release/11.0': {
             'tfm': 'net11.0',
             'branch': '11.0',
-            'quality': 'daily'
+            'quality': 'preview'
         },
         '10.0': {
             'tfm': 'net10.0',
@@ -33,7 +34,7 @@ class ChannelMap():
         'nativeaot11.0': {
             'tfm': 'nativeaot11.0',
             'branch': '11.0',
-            'quality': 'daily'
+            'quality': 'preview'
         },
         '9.0': {
             'tfm': 'net9.0',

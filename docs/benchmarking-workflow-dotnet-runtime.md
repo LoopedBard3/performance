@@ -52,6 +52,15 @@ corresponding ARM64 Mono builds while retaining CoreCLR jobs. The WASM template
 skips the Mono-only `non-v8` build when disabled; runtime owns the build flavors
 for the retained `v8` profile. These controls do not remove manual Mono support.
 
+The .NET 11 channels (`main`, `11.0`, `release/11.0`, and `nativeaot11.0`) in
+`scripts/channel_map.py` temporarily use `preview` quality instead of `daily`.
+Daily RTM SDKs request `11.0.0` runtime packs that are not yet available in the
+configured feeds, preventing the self-contained CertHelper publish. Preview
+quality follows public prerelease SDKs rather than pinning a specific version.
+This applies wherever these channels acquire an SDK, including WASM SDK-cohort
+runs; artifact-provided WASM SDKs and explicit SDK versions remain unchanged.
+Revisit the quality selection once the RTM runtime packs can be restored.
+
 ### Code Organization
 
 All Libraries benchmarks which have been ported from the old CoreFX repository belong to the corresponding folders: `libraries\$namespace`. The Runtime (old CoreCLR) benchmarks can be found in `runtime` subfolder. The directory structure is the following (some folders have been omitted for brevity):
